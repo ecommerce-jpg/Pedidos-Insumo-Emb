@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f6b4f">
+<title>Comprador Adoratto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Figtree:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="estilo.css">
+<style>
+.app{max-width:900px}
+.abas{display:flex;gap:4px;border-bottom:1px solid var(--line);padding-top:10px;overflow-x:auto}
+.abas button{font:700 16px var(--f-display);letter-spacing:.05em;text-transform:uppercase;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:8px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline}
+.abas button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.abas .n{font:600 12px var(--f-body);font-variant-numeric:tabular-nums;color:var(--muted)}
+.filtros{display:flex;flex-direction:column;gap:6px;padding-block:10px;border-bottom:1px solid var(--line)}
+.lista{flex:1;overflow-y:auto;padding-block:12px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.pedido{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:start}
+.pedido.marcado{border-color:var(--accent);background:var(--accent-soft)}
+.pedido .corpo{display:flex;flex-direction:column;gap:6px;min-width:0}
+.acoes{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px}
+.acoes select{padding:8px 10px;font-size:15px}
+.check{display:flex;gap:8px;align-items:center;font:600 14px var(--f-body);cursor:pointer;user-select:none}
+.check input{width:20px;height:20px;accent-color:var(--accent);margin:0;padding:0}
+.local-fixo{font-size:13px;color:var(--muted)}
+.local-fixo strong{color:var(--fg)}
+.rodape{border-top:1px solid var(--line);padding-block:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media (max-width:560px){
+  .pedido{grid-template-columns:minmax(0,1fr)}
+  .acoes{min-width:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Pedidos Adoratto <small>Comprador</small></h1>
+    <div class="who" id="who" hidden><span><strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button></div>
+  </header>
+
+  <section class="login" id="login" hidden>
+    <form id="login-form">
+      <h2>Entrar como comprador</h2>
+      <p>Só usuários marcados como Comprador na planilha conseguem entrar aqui.</p>
+      <label><span class="label">Usuário</span><input id="l-usuario" autocomplete="username" autocapitalize="none" required></label>
+      <label><span class="label">Senha</span><input id="l-senha" type="password" autocomplete="current-password" required></label>
+      <button class="send" id="l-entrar" type="submit">Entrar</button>
+      <div class="status" id="l-status"></div>
+    </form>
+  </section>
+
+  <div id="main" hidden style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="abas" role="tablist" id="abas"></div>
+    <div class="filtros">
+      <span class="label">Filtrar por setor e tipo</span>
+      <div class="chips" id="f-setor"></div>
+      <div class="chips" id="f-tipo"></div>
+    </div>
+    <div class="lista" id="lista" aria-live="polite"></div>
+    <div class="rodape" id="rodape">
+      <div class="status" id="status"></div>
+      <button class="send" id="salvar" type="button" disabled>Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Link do App da Web do Apps Script */
+const API_URL = "https://script.google.com/macros/s/AKfycbwqEwQPuAv6JuA-WwRYpj2bh_X_pHoTXt6CvnWIFVwvAKr5ojKrNHxiZ98UM_25teVoIA/exec";
+const ATUALIZAR_A_CADA_MS = 15000;
+const CHAVE_SESSAO = "comprador.sessao";
+
+const SETORES=["Confeitaria","Padaria","Padaria Frente","Restaurante","Refeitório"];
+const TIPOS=["Embalagem","Insumo"];
+const ABAS=[
+  {status:"Pendente",titulo:"Pendentes",check:"Compra acertada",proximo:"Feito",vazio:"Nenhum pedido pendente. Os pedidos novos da linha aparecem aqui."},
+  {status:"Feito",titulo:"Pedidos feitos",check:"Chegou",proximo:"Chegou",vazio:"Nenhum pedido feito aguardando chegada."},
+  {status:"Chegou",titulo:"Chegaram",check:null,proximo:null,vazio:"Nenhum pedido marcado como chegou ainda."}
+];
+/* edicoes[id] = {local, marcado}: o que o comprador mudou e ainda não salvou */
+const st={aba:"Pendente",fSetor:"Todos",fTipo:"Todos",pedidos:[],locais:[],edicoes:{},loaded:false,error:"",sessao:null,salvando:false};
+const $=id=>document.getElementById(id);
+
+function ler(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function gravar(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
+try{const x=JSON.parse(ler(CHAVE_SESSAO)||"null");if(x&&x.usuario&&x.token)st.sessao=x}catch(e){}
+function salvarSessao(){gravar(CHAVE_SESSAO,st.sessao?JSON.stringify(st.sessao):null)}
+
+async function api(body){
+  const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});
+  return r.json();
+}
+function chip(label,pressed,onClick,count){
+  const b=document.createElement("button");b.type="button";b.className="chip";
+  b.setAttribute("aria-pressed",pressed?"true":"false");b.textContent=label;
+  if(count!==undefined){const n=document.createElement("span");n.className="n";n.textContent=count;b.appendChild(n)}
+  b.onclick=onClick;return b;
+}
+function fmt(ms){if(!ms)return"";const d=new Date(ms);
+  return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}
+function vazio(titulo,texto){
+  const e=document.createElement("div");e.className="empty";const h=document.createElement("strong");
+  h.textContent=titulo;e.append(h,texto);return e;
+}
+
+/* Quais alterações vão para a planilha ao tocar em Salvar */
+function alteracoes(){
+  const out=[];
+  st.pedidos.forEach(p=>{
+    const ed=st.edicoes[p.id];if(!ed)return;
+    const aba=ABAS.find(a=>a.status===p.status);
+    const local=ed.local!==undefined?ed.local:p.local;
+    const status=ed.marcado&&aba&&aba.proximo?aba.proximo:p.status;
+    if(local!==p.local||status!==p.status)out.push({id:p.id,status,local});
+  });
+  return out;
+}
+
+function render(){
+  const logado=!!st.sessao;
+  $("login").hidden=logado;$("main").hidden=!logado;$("who").hidden=!logado;
+  if(!logado)return;
+  $("who-nome").textContent=st.sessao.nome;
+
+  const A=$("abas");A.replaceChildren();
+  ABAS.forEach(a=>{
+    const b=document.createElement("button");b.type="button";b.setAttribute("role","tab");
+    b.setAttribute("aria-selected",a.status===st.aba?"true":"false");b.textContent=a.titulo;
+    const n=document.createElement("span");n.className="n";n.textContent=st.pedidos.filter(p=>p.status===a.status).length;
+    b.appendChild(n);b.onclick=()=>{st.aba=a.status;render()};A.appendChild(b);
+  });
+
+  const daAba=st.pedidos.filter(p=>p.status===st.aba);
+  const FS=$("f-setor");FS.replaceChildren();
+  ["Todos",...SETORES].forEach(s=>FS.appendChild(chip(s,s===st.fSetor,()=>{st.fSetor=s;render()},daAba.filter(p=>s==="Todos"||p.setor===s).length)));
+  const FT=$("f-tipo");FT.replaceChildren();
+  ["Todos",...TIPOS].forEach(t=>FT.appendChild(chip(t,t===st.fTipo,()=>{st.fTipo=t;render()})));
+
+  const aba=ABAS.find(a=>a.status===st.aba);
+  const list=daAba.filter(p=>(st.fSetor==="Todos"||p.setor===st.fSetor)&&(st.fTipo==="Todos"||p.tipo===st.fTipo));
+  const L=$("lista");const topo=L.scrollTop;L.replaceChildren();
+  if(st.error)L.appendChild(vazio("Sem conexão",st.error));
+  else if(!st.loaded)L.appendChild(vazio("Carregando","Buscando os pedidos…"));
+  else if(!list.length)L.appendChild(vazio("Nada aqui",daAba.length?"Nenhum pedido com esses filtros.":aba.vazio));
+  else list.forEach(p=>L.appendChild(cartao(p,aba)));
+  L.scrollTop=topo;
+
+  const n=alteracoes().length;
+  $("rodape").hidden=st.aba==="Chegou";
+  $("salvar").disabled=!n||st.salvando;
+  $("salvar").textContent=n?"Salvar ("+n+")":"Salvar";
+}
+
+function cartao(p,aba){
+  const ed=st.edicoes[p.id]||{};
+  const c=document.createElement("div");c.className="pedido"+(ed.marcado?" marcado":"");
+  const corpo=document.createElement("div");corpo.className="corpo";
+  const meta=document.createElement("div");meta.className="meta";
+  const ts=document.createElement("span");ts.className="tag";ts.textContent=p.setor;
+  const tt=document.createElement("span");tt.className="tag "+p.tipo;tt.textContent=p.tipo;
+  const who=document.createElement("span");who.textContent=(p.nome||p.usuario||"Alguém")+" · "+fmt(p.data);
+  meta.append(ts,tt,who);
+  const tx=document.createElement("div");tx.className="text";tx.textContent=p.texto;
+  corpo.append(meta,tx);c.appendChild(corpo);
+
+  const acoes=document.createElement("div");acoes.className="acoes";
+  const localAtual=ed.local!==undefined?ed.local:p.local;
+  if(aba.check){
+    const sel=document.createElement("select");sel.id="local-"+p.id;sel.setAttribute("aria-label","Local de compra");
+    const o0=document.createElement("option");o0.value="";o0.textContent=st.locais.length?"Local de compra…":"Cadastre locais na aba Locais";sel.appendChild(o0);
+    const opcoes=st.locais.slice();if(p.local&&!opcoes.includes(p.local))opcoes.push(p.local);
+    opcoes.forEach(l=>{const o=document.createElement("option");o.value=l;o.textContent=l;sel.appendChild(o)});
+    sel.value=localAtual;
+    sel.onchange=()=>{st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{local:sel.value});render()};
+    const lab=document.createElement("label");lab.className="check";
+    const cb=document.createElement("input");cb.type="checkbox";cb.id="check-"+p.id;cb.checked=!!ed.marcado;
+    cb.onchange=()=>{st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{marcado:cb.checked});render()};
+    lab.append(cb,aba.check);
+    acoes.append(sel,lab);
+  }else{
+    const f=document.createElement("div");f.className="local-fixo";
+    f.append("Comprado em: ");const b=document.createElement("strong");b.textContent=p.local||"não informado";f.appendChild(b);
+    acoes.appendChild(f);
+  }
+  c.appendChild(acoes);
+  return c;
+}
+
+let carregando=false;
+async function carregar(){
+  if(!st.sessao||carregando||st.salvando)return;carregando=true;
+  try{
+    const j=await api({acao:"listar",pagina:"comprador",usuario:st.sessao.usuario,token:st.sessao.token});
+    if(j.sessao){carregando=false;sair(j.erro);return}
+    if(!j.ok){carregando=false;sair(j.erro||"Não foi possível entrar.");return}
+    st.sessao.nome=j.perfil.nome;salvarSessao();
+    st.pedidos=(j.pedidos||[]).filter(p=>SETORES.includes(p.setor)&&TIPOS.includes(p.tipo));
+    st.locais=j.locais||[];
+    /* descarta edições de pedidos que mudaram de aba por outro aparelho */
+    const vivos=new Set(st.pedidos.map(p=>p.id));
+    Object.keys(st.edicoes).forEach(id=>{if(!vivos.has(id))delete st.edicoes[id]});
+    st.error="";
+  }catch(e){if(!st.pedidos.length)st.error="Não foi possível carregar os pedidos. Verifique a internet."}
+  carregando=false;st.loaded=true;render();
+}
+
+$("salvar").onclick=async()=>{
+  const lista=alteracoes();const s=$("status");if(!lista.length)return;
+  st.salvando=true;render();s.className="status";s.textContent="Salvando…";
+  try{
+    const j=await api({acao:"salvar",usuario:st.sessao.usuario,token:st.sessao.token,alteracoes:lista});
+    if(j.sessao){st.salvando=false;sair(j.erro);return}
+    if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi salvo. Tente de novo."}
+    else{
+      lista.forEach(a=>delete st.edicoes[a.id]);
+      s.textContent=j.salvos===1?"1 pedido salvo.":j.salvos+" pedidos salvos.";
+    }
+  }catch(e){s.className="status err";s.textContent="Não foi salvo: sem conexão com a planilha. Tente de novo."}
+  st.salvando=false;await carregar();
+};
+
+function sair(msg){
+  st.sessao=null;st.pedidos=[];st.edicoes={};st.loaded=false;salvarSessao();
+  const s=$("l-status");s.className=msg?"status err":"status";s.textContent=msg||"";render();
+}
+$("sair").onclick=()=>sair();
+
+$("login-form").addEventListener("submit",async e=>{
+  e.preventDefault();const s=$("l-status");const u=$("l-usuario").value.trim(),p=$("l-senha").value;
+  if(!u||!p){s.className="status err";s.textContent="Preencha usuário e senha.";return}
+  $("l-entrar").disabled=true;s.className="status";s.textContent="Entrando…";
+  try{
+    const j=await api({acao:"login",usuario:u,senha:p});
+    if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi possível entrar."}
+    else if(!j.perfil.comprador){s.className="status err";s.textContent="Este usuário não tem acesso de comprador."}
+    else{st.sessao=j.perfil;salvarSessao();$("l-senha").value="";s.textContent="";render();carregar()}
+  }catch(err){s.className="status err";s.textContent="Sem conexão com a planilha. Tente de novo."}
+  $("l-entrar").disabled=false;
+});
+
+render();
+carregar();
+setInterval(()=>{if(!document.hidden)carregar()},ATUALIZAR_A_CADA_MS);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)carregar()});
+</script>
+</body>
+</html>

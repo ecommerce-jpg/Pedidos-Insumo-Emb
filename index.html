@@ -7,82 +7,19 @@
 <title>Pedidos Adoratto</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Figtree:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="estilo.css">
 <style>
-/* Layout: app de uma tela — cabeçalho com as duas visões, lista de mensagens rolando, caixa de envio fixa embaixo */
-:root{
-  --bg:#f3f5f2; --surface:#ffffff; --fg:#1d2420; --muted:#5f6b64; --line:#d9dfda;
-  --accent:#2f6b4f; --accent-fg:#ffffff; --accent-soft:#e2efe7;
-  --emb:#8a5a12; --emb-soft:#f6ead5; --ins:#2d5a8c; --ins-soft:#e1ebf6;
-  --danger:#a33b2a;
-  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
-  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){:root{
-  --bg:#151a17; --surface:#1e2521; --fg:#e7ece9; --muted:#9aa7a0; --line:#2f3833;
-  --accent:#6fbf94; --accent-fg:#0f1a14; --accent-soft:#233a2d;
-  --emb:#e3b46a; --emb-soft:#3a2e1b; --ins:#8ab6e6; --ins-soft:#1e2d3d; --danger:#ef8b78;
-  color-scheme:dark}}
-*{box-sizing:border-box}
-[hidden]{display:none!important}
-html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.45;
-  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.app{height:100%;display:flex;flex-direction:column;max-width:760px;margin:0 auto;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding-block:14px 10px;border-bottom:1px solid var(--line)}
-h1{font-family:var(--f-display);font-weight:700;font-size:26px;letter-spacing:.02em;margin:0;text-transform:uppercase;text-wrap:balance}
-.views{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
-.views button{font:600 14px var(--f-body);border:0;background:transparent;color:var(--muted);padding:8px 14px;border-radius:7px;cursor:pointer}
-.views button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
-.who{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);padding-top:8px}
-.who strong{color:var(--fg)}
-.link{font:600 13px var(--f-body);background:none;border:0;color:var(--accent);cursor:pointer;padding:4px 0;text-decoration:underline}
-.label{font-family:var(--f-display);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{font:500 14px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:7px 12px;border-radius:999px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
-.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
-.chip .n{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
-.bar{display:flex;flex-direction:column;gap:6px;padding-block:10px;border-bottom:1px solid var(--line)}
-.thread{flex:1;overflow-y:auto;padding-block:14px;display:flex;flex-direction:column;gap:10px;min-height:0}
-.msg{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;max-width:92%;min-width:0}
-.msg.mine{align-self:flex-end;border-color:var(--accent)}
-.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--muted)}
-.tag{font-family:var(--f-display);font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:5px;background:var(--accent-soft);color:var(--fg)}
-.tag.Embalagem{background:var(--emb-soft);color:var(--emb)}
-.tag.Insumo{background:var(--ins-soft);color:var(--ins)}
-.text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
-.empty{margin:auto;text-align:center;color:var(--muted);max-width:34ch;padding:24px 0}
-.empty strong{display:block;color:var(--fg);font-family:var(--f-display);font-size:20px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
 #form{border-top:1px solid var(--line);padding-block:10px 14px;display:flex;flex-direction:column;gap:8px}
-.row{display:flex;gap:8px;align-items:flex-end}
-textarea,input{font:400 16px var(--f-body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px}
-textarea{flex:1;min-width:0;resize:none;min-height:46px;max-height:140px}
-textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.send{font:700 15px var(--f-display);letter-spacing:.06em;text-transform:uppercase;background:var(--accent);color:var(--accent-fg);border:0;border-radius:10px;padding:0 18px;height:46px;cursor:pointer}
-.send:disabled{opacity:.5;cursor:default}
-.status{font-size:13px;color:var(--muted);min-height:1em}
-.status.err{color:var(--danger)}
-#login{flex:1;display:flex;align-items:center;justify-content:center;padding-block:24px}
-#login form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
-#login h2{font-family:var(--f-display);font-size:22px;text-transform:uppercase;letter-spacing:.03em;margin:0}
-#login p{margin:0;color:var(--muted);font-size:14px}
-#login label{display:flex;flex-direction:column;gap:4px}
-#login .send{width:100%}
-@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>Pedidos Adoratto</h1>
-    <div class="views" role="group" aria-label="Visão">
-      <button id="v-linha" type="button" aria-pressed="true">Linha</button>
-      <button id="v-comprador" type="button" aria-pressed="false">Comprador</button>
-    </div>
+    <div class="who" id="who" hidden><span><strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button></div>
   </header>
 
-  <section id="login" hidden>
+  <section class="login" id="login" hidden>
     <form id="login-form">
       <h2>Entrar</h2>
       <p>Use o usuário e a senha que o administrativo cadastrou para você.</p>
@@ -93,12 +30,10 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
     </form>
   </section>
 
-  <div id="main">
+  <div id="main" hidden>
     <div class="bar">
-      <span class="label" id="bar-label">Seu setor</span>
+      <span class="label" id="bar-label">Setor</span>
       <div class="chips" id="setores"></div>
-      <div class="chips" id="tipos-filtro" hidden></div>
-      <div class="who" id="who" hidden><span>Logado como <strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button></div>
     </div>
 
     <div class="thread" id="thread" aria-live="polite"></div>
@@ -115,77 +50,77 @@ textarea:focus,input:focus,button:focus-visible{outline:2px solid var(--accent);
 </div>
 
 <script>
-/* Link do App da Web do Apps Script (Implantar → Nova implantação → App da Web) */
+/* Link do App da Web do Apps Script */
 const API_URL = "https://script.google.com/macros/s/AKfycbwqEwQPuAv6JuA-WwRYpj2bh_X_pHoTXt6CvnWIFVwvAKr5ojKrNHxiZ98UM_25teVoIA/exec";
 const ATUALIZAR_A_CADA_MS = 15000;
+const CHAVE_SESSAO = "pedidos.sessao";
 
-const SETORES=["Confeitaria","Padaria","Padaria Frente","Restaurante","Refeitório"];
 const TIPOS=["Embalagem","Insumo"];
-const st={view:"linha",setor:"Confeitaria",tipo:"Embalagem",filtroSetor:"Todos",filtroTipo:"Todos",msgs:[],loaded:false,error:"",sessao:null};
+const st={setor:null,tipo:"Embalagem",msgs:[],loaded:false,error:"",sessao:null};
 const $=id=>document.getElementById(id);
-const configurado=API_URL.startsWith("https://");
 
 function ler(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function gravar(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
-{const s=ler("pedidos.setor");if(SETORES.includes(s))st.setor=s;
- try{const x=JSON.parse(ler("pedidos.sessao")||"null");if(x&&x.usuario&&x.token)st.sessao=x}catch(e){}}
+try{const x=JSON.parse(ler(CHAVE_SESSAO)||"null");if(x&&x.usuario&&x.token)st.sessao=x}catch(e){}
 
 async function api(body){
   const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});
   return r.json();
 }
+function salvarSessao(){gravar(CHAVE_SESSAO,st.sessao?JSON.stringify(st.sessao):null)}
+function escolherSetor(){
+  const s=st.sessao&&st.sessao.setores||[];
+  const lembrado=ler("pedidos.setor");
+  if(!s.includes(st.setor))st.setor=s.includes(lembrado)?lembrado:(s[0]||null);
+}
 
-function chip(label,pressed,onClick,count){
+function chip(label,pressed,onClick){
   const b=document.createElement("button");b.type="button";b.className="chip";
-  b.setAttribute("aria-pressed",pressed?"true":"false");b.textContent=label;
-  if(count!==undefined){const n=document.createElement("span");n.className="n";n.textContent=count;b.appendChild(n)}
-  b.onclick=onClick;return b;
+  b.setAttribute("aria-pressed",pressed?"true":"false");b.textContent=label;b.onclick=onClick;return b;
 }
 function fmt(ms){if(!ms)return"";const d=new Date(ms);
   return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}
 
-function render(){
-  const linha=st.view==="linha";
-  $("v-linha").setAttribute("aria-pressed",linha);$("v-comprador").setAttribute("aria-pressed",!linha);
-  const precisaLogin=linha&&!st.sessao&&configurado;
-  $("login").hidden=!precisaLogin;$("main").hidden=precisaLogin;
-  if(precisaLogin)return;
+function vazio(titulo,texto){
+  const e=document.createElement("div");e.className="empty";const h=document.createElement("strong");
+  h.textContent=titulo;e.append(h,texto);return e;
+}
 
-  $("form").hidden=!linha||!st.sessao;$("tipos-filtro").hidden=linha;
-  $("who").hidden=!linha||!st.sessao;if(st.sessao)$("who-nome").textContent=st.sessao.nome;
-  $("bar-label").textContent=linha?"Seu setor":"Filtrar por setor e tipo";
+function render(){
+  const logado=!!st.sessao;
+  $("login").hidden=logado;$("main").hidden=!logado;$("who").hidden=!logado;
+  if(!logado)return;
+  $("who-nome").textContent=st.sessao.nome;
+  const setores=st.sessao.setores||[];
 
   const S=$("setores");S.replaceChildren();
-  if(linha){
-    SETORES.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);render()})));
+  if(setores.length>1){
+    $("bar-label").textContent="Escolha o setor";
+    setores.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);render()})));
   }else{
-    const cnt=s=>st.msgs.filter(m=>s==="Todos"||m.setor===s).length;
-    ["Todos",...SETORES].forEach(s=>S.appendChild(chip(s,s===st.filtroSetor,()=>{st.filtroSetor=s;render()},cnt(s))));
-    const T=$("tipos-filtro");T.replaceChildren();
-    ["Todos",...TIPOS].forEach(t=>T.appendChild(chip(t,t===st.filtroTipo,()=>{st.filtroTipo=t;render()})));
+    $("bar-label").textContent="Setor: "+(setores[0]||"nenhum");
   }
   const TP=$("tipos");TP.replaceChildren();
   TIPOS.forEach(t=>TP.appendChild(chip(t,t===st.tipo,()=>{st.tipo=t;render()})));
+  $("form").hidden=!st.setor;
 
-  const list=linha?st.msgs.filter(m=>m.setor===st.setor)
-    :st.msgs.filter(m=>(st.filtroSetor==="Todos"||m.setor===st.filtroSetor)&&(st.filtroTipo==="Todos"||m.tipo===st.filtroTipo));
   const th=$("thread");const atBottom=th.scrollHeight-th.scrollTop-th.clientHeight<40;th.replaceChildren();
-  if(!st.loaded||st.error||!list.length){
-    const e=document.createElement("div");e.className="empty";const h=document.createElement("strong");
-    if(st.error){h.textContent="Sem conexão";e.append(h,st.error)}
-    else if(!st.loaded){h.textContent="Carregando";e.append(h,"Buscando os pedidos…")}
-    else if(linha){h.textContent="Nenhum pedido";e.append(h,"Ainda não há pedidos de "+st.setor+". Escolha o tipo, digite abaixo e toque em Enviar.")}
-    else{h.textContent="Nenhum pedido";e.append(h,"Os pedidos enviados pela linha aparecem aqui, separados por setor.")}
-    th.appendChild(e);
-  }else{
-    const me=st.sessao&&st.sessao.usuario.toLowerCase();
+  const list=st.msgs.filter(m=>m.setor===st.setor);
+  if(!setores.length){
+    th.appendChild(vazio("Sem setor",st.sessao.comprador
+      ?"Este usuário é de comprador. Use a página do comprador."
+      :"Seu usuário ainda não tem setor cadastrado. Fale com o administrativo."));
+  }else if(st.error)th.appendChild(vazio("Sem conexão",st.error));
+  else if(!st.loaded)th.appendChild(vazio("Carregando","Buscando os pedidos…"));
+  else if(!list.length)th.appendChild(vazio("Nenhum pedido","Ainda não há pedidos de "+st.setor+". Escolha o tipo, digite abaixo e toque em Enviar."));
+  else{
+    const me=st.sessao.usuario.toLowerCase();
     list.forEach(m=>{
-      const d=document.createElement("div");d.className="msg"+(linha&&me&&String(m.usuario).toLowerCase()===me?" mine":"");
+      const d=document.createElement("div");d.className="msg"+(String(m.usuario).toLowerCase()===me?" mine":"");
       const meta=document.createElement("div");meta.className="meta";
-      const ts=document.createElement("span");ts.className="tag";ts.textContent=m.setor;
       const tt=document.createElement("span");tt.className="tag "+m.tipo;tt.textContent=m.tipo;
       const who=document.createElement("span");who.textContent=(m.nome||m.usuario||"Alguém")+" · "+fmt(m.data);
-      if(linha)meta.append(tt,who);else meta.append(ts,tt,who);
+      meta.append(tt,who);
       const tx=document.createElement("div");tx.className="text";tx.textContent=m.texto;
       d.append(meta,tx);th.appendChild(d);
     });
@@ -195,19 +130,23 @@ function render(){
 
 let carregando=false;
 async function carregar(){
-  if(!configurado){st.loaded=true;st.error="A página ainda não foi ligada à planilha.";render();return}
-  if(carregando)return;carregando=true;
+  if(!st.sessao||carregando)return;carregando=true;
   try{
-    const r=await fetch(API_URL,{cache:"no-store"});const j=await r.json();
+    const j=await api({acao:"listar",pagina:"linha",usuario:st.sessao.usuario,token:st.sessao.token});
+    if(j.sessao){sair(j.erro);carregando=false;return}
     if(!j.ok)throw new Error();
-    st.msgs=(j.pedidos||[]).filter(m=>SETORES.includes(m.setor)&&TIPOS.includes(m.tipo));
-    st.error="";
+    Object.assign(st.sessao,{nome:j.perfil.nome,setores:j.perfil.setores,comprador:j.perfil.comprador});salvarSessao();
+    escolherSetor();
+    st.msgs=j.pedidos||[];st.error="";
   }catch(e){if(!st.msgs.length)st.error="Não foi possível carregar os pedidos. Verifique a internet."}
   carregando=false;st.loaded=true;render();
 }
 
-function sair(){st.sessao=null;gravar("pedidos.sessao",null);render()}
-$("sair").onclick=sair;
+function sair(msg){
+  st.sessao=null;st.msgs=[];st.loaded=false;salvarSessao();
+  const s=$("l-status");s.className=msg?"status err":"status";s.textContent=msg||"";render();
+}
+$("sair").onclick=()=>sair();
 
 $("login-form").addEventListener("submit",async e=>{
   e.preventDefault();const s=$("l-status");const u=$("l-usuario").value.trim(),p=$("l-senha").value;
@@ -216,15 +155,10 @@ $("login-form").addEventListener("submit",async e=>{
   try{
     const j=await api({acao:"login",usuario:u,senha:p});
     if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi possível entrar."}
-    else{st.sessao={usuario:j.usuario,nome:j.nome,token:j.token};gravar("pedidos.sessao",JSON.stringify(st.sessao));$("l-senha").value="";s.textContent="";render()}
+    else{st.sessao=j.perfil;salvarSessao();escolherSetor();$("l-senha").value="";s.textContent="";render();carregar()}
   }catch(err){s.className="status err";s.textContent="Sem conexão com a planilha. Tente de novo."}
   $("l-entrar").disabled=false;
 });
-
-$("v-linha").onclick=()=>{location.hash="linha"};
-$("v-comprador").onclick=()=>{location.hash="comprador"};
-function fromHash(){st.view=location.hash==="#comprador"?"comprador":"linha";render()}
-window.addEventListener("hashchange",fromHash);
 
 const ta=$("texto");
 ta.addEventListener("input",()=>{ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px"});
@@ -233,18 +167,18 @@ ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefa
 $("form").addEventListener("submit",async e=>{
   e.preventDefault();const texto=ta.value.trim();const s=$("status");
   if(!texto){s.className="status err";s.textContent="Digite o pedido antes de enviar.";return}
-  if(!configurado){s.className="status err";s.textContent="A página ainda não foi ligada à planilha.";return}
   $("enviar").disabled=true;s.className="status";s.textContent="Enviando…";
   try{
     const j=await api({acao:"enviar",usuario:st.sessao.usuario,token:st.sessao.token,setor:st.setor,tipo:st.tipo,texto});
     if(j.ok){ta.value="";ta.style.height="auto";s.textContent="Enviado para o comprador.";carregar()}
-    else if(j.sessao){s.textContent="";sair();$("l-status").className="status err";$("l-status").textContent=j.erro}
+    else if(j.sessao){s.textContent="";sair(j.erro)}
     else{s.className="status err";s.textContent=j.erro||"Não foi enviado. Tente de novo."}
   }catch(err){s.className="status err";s.textContent="Não foi enviado: sem conexão com a planilha. Tente de novo."}
   $("enviar").disabled=false;
 });
 
-fromHash();
+escolherSetor();
+render();
 carregar();
 setInterval(()=>{if(!document.hidden)carregar()},ATUALIZAR_A_CADA_MS);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)carregar()});
