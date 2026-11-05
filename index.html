@@ -10,13 +10,24 @@
 <link rel="stylesheet" href="estilo.css">
 <style>
 #form{border-top:1px solid var(--line);padding-block:10px 14px;display:flex;flex-direction:column;gap:8px}
+#form .campos{display:grid;grid-template-columns:minmax(0,1fr) 92px auto;gap:8px;align-items:end}
+#form label{display:flex;flex-direction:column;gap:4px;min-width:0}
+#form input{width:100%;min-width:0}
+#unidades{flex-wrap:nowrap}
+#form .acoes-envio{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.msg .linha-produto{display:flex;gap:10px;align-items:baseline;justify-content:space-between}
+.msg .rodape-msg{display:flex;justify-content:flex-end}
+@media (max-width:520px){#form .campos{grid-template-columns:minmax(0,1fr) 84px}#form .unid{grid-column:1 / -1}}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>Pedidos Adoratto</h1>
-    <div class="who" id="who" hidden><span><strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button></div>
+    <div class="who" id="who" hidden>
+      <a class="nav" id="ir-comprador" href="comprador.html" hidden>Comprador →</a>
+      <span><strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button>
+    </div>
   </header>
 
   <section class="login" id="login" hidden>
@@ -30,7 +41,7 @@
     </form>
   </section>
 
-  <div id="main" hidden>
+  <div id="main" hidden style="flex:1;display:flex;flex-direction:column;min-height:0">
     <div class="bar">
       <span class="label" id="bar-label">Setor</span>
       <div class="chips" id="setores"></div>
@@ -38,49 +49,54 @@
 
     <div class="thread" id="thread" aria-live="polite"></div>
 
-    <form id="form">
+    <form id="form" novalidate>
       <div class="chips" id="tipos" role="group" aria-label="Tipo do item"></div>
-      <div class="row">
-        <textarea id="texto" rows="1" maxlength="1000" placeholder="Digite o pedido. Ex.: 2 caixas de bandeja de isopor P"></textarea>
+      <div class="campos">
+        <label><span class="label">Produto</span><input id="produto" maxlength="200" autocomplete="off" placeholder="Ex.: Bandeja de isopor P"></label>
+        <label><span class="label">Quantidade</span><input id="quantidade" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+        <div class="unid"><div class="chips" id="unidades" role="group" aria-label="Unidade"></div></div>
+      </div>
+      <div class="acoes-envio">
+        <div class="status" id="status"></div>
         <button class="send" id="enviar" type="submit">Enviar</button>
       </div>
-      <div class="status" id="status"></div>
     </form>
   </div>
 </div>
 
 <script>
 /* Link do App da Web do Apps Script */
-const API_URL = "https://script.google.com/macros/s/AKfycbwqEwQPuAv6JuA-WwRYpj2bh_X_pHoTXt6CvnWIFVwvAKr5ojKrNHxiZ98UM_25teVoIA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwxP76a2x7Q92bsODviNs9_Qy7luDk_jdI7wydvWivpZLA8M6HqI9cX9yyvvAImElUY/exec";
 const ATUALIZAR_A_CADA_MS = 15000;
 const CHAVE_SESSAO = "pedidos.sessao";
 
 const TIPOS=["Embalagem","Insumo"];
-const st={setor:null,tipo:"Embalagem",msgs:[],loaded:false,error:"",sessao:null};
+const UNIDADES=["Kg","Un"];
+const st={setor:null,tipo:"Embalagem",unidade:"Un",msgs:[],loaded:false,error:"",sessao:null,apagando:null};
 const $=id=>document.getElementById(id);
 
 function ler(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function gravar(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
 try{const x=JSON.parse(ler(CHAVE_SESSAO)||"null");if(x&&x.usuario&&x.token)st.sessao=x}catch(e){}
+function salvarSessao(){gravar(CHAVE_SESSAO,st.sessao?JSON.stringify(st.sessao):null)}
 
 async function api(body){
   const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});
   return r.json();
 }
-function salvarSessao(){gravar(CHAVE_SESSAO,st.sessao?JSON.stringify(st.sessao):null)}
+function auth(extra){return Object.assign({usuario:st.sessao.usuario,token:st.sessao.token},extra)}
 function escolherSetor(){
   const s=st.sessao&&st.sessao.setores||[];
   const lembrado=ler("pedidos.setor");
   if(!s.includes(st.setor))st.setor=s.includes(lembrado)?lembrado:(s[0]||null);
 }
-
 function chip(label,pressed,onClick){
   const b=document.createElement("button");b.type="button";b.className="chip";
   b.setAttribute("aria-pressed",pressed?"true":"false");b.textContent=label;b.onclick=onClick;return b;
 }
 function fmt(ms){if(!ms)return"";const d=new Date(ms);
   return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}
-
+function qtd(m){return m.quantidade===""||m.quantidade==null?"":String(m.quantidade).replace(".",",")+" "+(m.unidade||"")}
 function vazio(titulo,texto){
   const e=document.createElement("div");e.className="empty";const h=document.createElement("strong");
   h.textContent=titulo;e.append(h,texto);return e;
@@ -91,17 +107,20 @@ function render(){
   $("login").hidden=logado;$("main").hidden=!logado;$("who").hidden=!logado;
   if(!logado)return;
   $("who-nome").textContent=st.sessao.nome;
+  $("ir-comprador").hidden=!st.sessao.mestre;
   const setores=st.sessao.setores||[];
 
   const S=$("setores");S.replaceChildren();
-  if(setores.length>1){
-    $("bar-label").textContent="Escolha o setor";
+  if(st.sessao.mestre&&setores.length>1){
+    $("bar-label").textContent="Setor (mestre)";
     setores.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);render()})));
   }else{
-    $("bar-label").textContent="Setor: "+(setores[0]||"nenhum");
+    $("bar-label").textContent="Setor: "+(st.setor||"nenhum");
   }
   const TP=$("tipos");TP.replaceChildren();
   TIPOS.forEach(t=>TP.appendChild(chip(t,t===st.tipo,()=>{st.tipo=t;render()})));
+  const UN=$("unidades");UN.replaceChildren();
+  UNIDADES.forEach(u=>UN.appendChild(chip(u,u===st.unidade,()=>{st.unidade=u;render()})));
   $("form").hidden=!st.setor;
 
   const th=$("thread");const atBottom=th.scrollHeight-th.scrollTop-th.clientHeight<40;th.replaceChildren();
@@ -112,17 +131,28 @@ function render(){
       :"Seu usuário ainda não tem setor cadastrado. Fale com o administrativo."));
   }else if(st.error)th.appendChild(vazio("Sem conexão",st.error));
   else if(!st.loaded)th.appendChild(vazio("Carregando","Buscando os pedidos…"));
-  else if(!list.length)th.appendChild(vazio("Nenhum pedido","Ainda não há pedidos de "+st.setor+". Escolha o tipo, digite abaixo e toque em Enviar."));
+  else if(!list.length)th.appendChild(vazio("Nenhum pedido","Ainda não há pedidos de "+st.setor+". Preencha o produto e a quantidade abaixo e toque em Enviar."));
   else{
     const me=st.sessao.usuario.toLowerCase();
     list.forEach(m=>{
-      const d=document.createElement("div");d.className="msg"+(String(m.usuario).toLowerCase()===me?" mine":"");
+      const meu=String(m.usuario).toLowerCase()===me;
+      const d=document.createElement("div");d.className="msg"+(meu?" mine":"");
       const meta=document.createElement("div");meta.className="meta";
       const tt=document.createElement("span");tt.className="tag "+m.tipo;tt.textContent=m.tipo;
       const who=document.createElement("span");who.textContent=(m.nome||m.usuario||"Alguém")+" · "+fmt(m.data);
       meta.append(tt,who);
-      const tx=document.createElement("div");tx.className="text";tx.textContent=m.texto;
-      d.append(meta,tx);th.appendChild(d);
+      const lp=document.createElement("div");lp.className="linha-produto";
+      const pr=document.createElement("span");pr.className="produto";pr.textContent=m.produto;
+      const q=document.createElement("span");q.className="qtd";q.textContent=qtd(m);
+      lp.append(pr,q);
+      d.append(meta,lp);
+      if(meu&&m.status==="Pendente"){
+        const r=document.createElement("div");r.className="rodape-msg";
+        const b=document.createElement("button");b.type="button";b.className="btn perigo";
+        b.textContent=st.apagando===m.id?"Apagando…":"Apagar";b.disabled=st.apagando===m.id;
+        b.onclick=()=>apagar(m);r.appendChild(b);d.appendChild(r);
+      }
+      th.appendChild(d);
     });
   }
   if(atBottom||!render.done)th.scrollTop=th.scrollHeight;render.done=true;
@@ -132,14 +162,25 @@ let carregando=false;
 async function carregar(){
   if(!st.sessao||carregando)return;carregando=true;
   try{
-    const j=await api({acao:"listar",pagina:"linha",usuario:st.sessao.usuario,token:st.sessao.token});
-    if(j.sessao){sair(j.erro);carregando=false;return}
+    const j=await api(auth({acao:"listar",pagina:"linha"}));
+    if(j.sessao){carregando=false;sair(j.erro);return}
     if(!j.ok)throw new Error();
-    Object.assign(st.sessao,{nome:j.perfil.nome,setores:j.perfil.setores,comprador:j.perfil.comprador});salvarSessao();
+    Object.assign(st.sessao,j.perfil);salvarSessao();
     escolherSetor();
     st.msgs=j.pedidos||[];st.error="";
   }catch(e){if(!st.msgs.length)st.error="Não foi possível carregar os pedidos. Verifique a internet."}
   carregando=false;st.loaded=true;render();
+}
+
+async function apagar(m){
+  if(!confirm('Apagar o pedido "'+m.produto+'"?'))return;
+  const s=$("status");st.apagando=m.id;render();
+  try{
+    const j=await api(auth({acao:"apagar",ids:[m.id]}));
+    if(j.sessao){st.apagando=null;sair(j.erro);return}
+    s.className=j.ok?"status":"status err";s.textContent=j.ok?"Pedido apagado.":(j.erro||"Não foi apagado.");
+  }catch(e){s.className="status err";s.textContent="Não foi apagado: sem conexão com a planilha."}
+  st.apagando=null;await carregar();
 }
 
 function sair(msg){
@@ -155,22 +196,22 @@ $("login-form").addEventListener("submit",async e=>{
   try{
     const j=await api({acao:"login",usuario:u,senha:p});
     if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi possível entrar."}
+    else if(!j.perfil){s.className="status err";s.textContent="A planilha está com o código antigo. Publique a nova versão do Apps Script."}
     else{st.sessao=j.perfil;salvarSessao();escolherSetor();$("l-senha").value="";s.textContent="";render();carregar()}
   }catch(err){s.className="status err";s.textContent="Sem conexão com a planilha. Tente de novo."}
   $("l-entrar").disabled=false;
 });
 
-const ta=$("texto");
-ta.addEventListener("input",()=>{ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px"});
-ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("form").requestSubmit()}});
-
 $("form").addEventListener("submit",async e=>{
-  e.preventDefault();const texto=ta.value.trim();const s=$("status");
-  if(!texto){s.className="status err";s.textContent="Digite o pedido antes de enviar.";return}
+  e.preventDefault();const s=$("status");
+  const produto=$("produto").value.trim();const qtdTxt=$("quantidade").value.trim();
+  const n=Number(qtdTxt.replace(",","."));
+  if(!produto){s.className="status err";s.textContent="Digite o nome do produto.";$("produto").focus();return}
+  if(!qtdTxt||!isFinite(n)||n<=0){s.className="status err";s.textContent="Digite uma quantidade maior que zero.";$("quantidade").focus();return}
   $("enviar").disabled=true;s.className="status";s.textContent="Enviando…";
   try{
-    const j=await api({acao:"enviar",usuario:st.sessao.usuario,token:st.sessao.token,setor:st.setor,tipo:st.tipo,texto});
-    if(j.ok){ta.value="";ta.style.height="auto";s.textContent="Enviado para o comprador.";carregar()}
+    const j=await api(auth({acao:"enviar",setor:st.setor,tipo:st.tipo,produto,quantidade:n,unidade:st.unidade}));
+    if(j.ok){$("produto").value="";$("quantidade").value="";s.textContent="Enviado para o comprador.";$("produto").focus();carregar()}
     else if(j.sessao){s.textContent="";sair(j.erro)}
     else{s.className="status err";s.textContent=j.erro||"Não foi enviado. Tente de novo."}
   }catch(err){s.className="status err";s.textContent="Não foi enviado: sem conexão com a planilha. Tente de novo."}

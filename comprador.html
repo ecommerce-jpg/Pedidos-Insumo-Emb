@@ -9,34 +9,47 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Figtree:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="estilo.css">
 <style>
-.app{max-width:900px}
+.app{max-width:920px}
 .abas{display:flex;gap:4px;border-bottom:1px solid var(--line);padding-top:10px;overflow-x:auto}
 .abas button{font:700 16px var(--f-display);letter-spacing:.05em;text-transform:uppercase;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:8px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;gap:6px;align-items:baseline}
 .abas button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
 .abas .n{font:600 12px var(--f-body);font-variant-numeric:tabular-nums;color:var(--muted)}
 .filtros{display:flex;flex-direction:column;gap:6px;padding-block:10px;border-bottom:1px solid var(--line)}
+.arquivos{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding-block:10px;border-bottom:1px solid var(--line)}
+.arquivos input{padding:6px 8px;font-size:14px}
+.arquivos .resultado{flex-basis:100%;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.arquivos a{color:var(--accent)}
 .lista{flex:1;overflow-y:auto;padding-block:12px;display:flex;flex-direction:column;gap:10px;min-height:0}
 .pedido{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:start}
 .pedido.marcado{border-color:var(--accent);background:var(--accent-soft)}
+.pedido.invalido{border-color:var(--danger)}
 .pedido .corpo{display:flex;flex-direction:column;gap:6px;min-width:0}
-.acoes{display:flex;flex-direction:column;gap:8px;align-items:stretch;min-width:200px}
-.acoes select{padding:8px 10px;font-size:15px}
+.pedido .linha-produto{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.acoes{display:flex;flex-direction:column;gap:8px;align-items:stretch;width:220px}
+.acoes select,.acoes input[type=text]{padding:8px 10px;font-size:15px;width:100%}
+.acoes .botoes{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .check{display:flex;gap:8px;align-items:center;font:600 14px var(--f-body);cursor:pointer;user-select:none}
 .check input{width:20px;height:20px;accent-color:var(--accent);margin:0;padding:0}
-.local-fixo{font-size:13px;color:var(--muted)}
-.local-fixo strong{color:var(--fg)}
+.info{font-size:13px;color:var(--muted)}
+.info strong{color:var(--fg)}
+.divisor{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:6px;border-top:2px dashed var(--line);margin-top:6px}
+.divisor .label{flex:1}
+.editar{grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.editar label{display:flex;flex-direction:column;gap:4px;min-width:0}
+.editar select,.editar input{padding:8px;font-size:15px;width:100%;min-width:0}
+.editar .botoes{grid-column:1 / -1;display:flex;gap:8px;justify-content:flex-end}
 .rodape{border-top:1px solid var(--line);padding-block:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-@media (max-width:560px){
-  .pedido{grid-template-columns:minmax(0,1fr)}
-  .acoes{min-width:0}
-}
+@media (max-width:600px){.pedido{grid-template-columns:minmax(0,1fr)}.acoes{width:auto}}
 </style>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>Pedidos Adoratto <small>Comprador</small></h1>
-    <div class="who" id="who" hidden><span><strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button></div>
+    <div class="who" id="who" hidden>
+      <a class="nav" id="ir-linha" href="./" hidden>← Linha</a>
+      <span><strong id="who-nome"></strong></span><button class="link" id="sair" type="button">Sair</button>
+    </div>
   </header>
 
   <section class="login" id="login" hidden>
@@ -52,6 +65,12 @@
 
   <div id="main" hidden style="flex:1;display:flex;flex-direction:column;min-height:0">
     <div class="abas" role="tablist" id="abas"></div>
+    <div class="arquivos">
+      <span class="label">Arquivos do dia</span>
+      <input type="date" id="g-dia" aria-label="Dia dos arquivos">
+      <button class="btn" id="gerar" type="button">Gerar PDF e Excel</button>
+      <div class="resultado" id="g-resultado" hidden></div>
+    </div>
     <div class="filtros">
       <span class="label">Filtrar por setor e tipo</span>
       <div class="chips" id="f-setor"></div>
@@ -67,20 +86,26 @@
 
 <script>
 /* Link do App da Web do Apps Script */
-const API_URL = "https://script.google.com/macros/s/AKfycbwqEwQPuAv6JuA-WwRYpj2bh_X_pHoTXt6CvnWIFVwvAKr5ojKrNHxiZ98UM_25teVoIA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwxP76a2x7Q92bsODviNs9_Qy7luDk_jdI7wydvWivpZLA8M6HqI9cX9yyvvAImElUY/exec";
 const ATUALIZAR_A_CADA_MS = 15000;
 const CHAVE_SESSAO = "comprador.sessao";
+const OUTRO = "__outro__";
 
 const SETORES=["Confeitaria","Padaria","Padaria Frente","Restaurante","Refeitório"];
 const TIPOS=["Embalagem","Insumo"];
+const UNIDADES=["Kg","Un"];
+const STATUS=["Pendente","Feito","Chegou"];
 const ABAS=[
   {status:"Pendente",titulo:"Pendentes",check:"Compra acertada",proximo:"Feito",vazio:"Nenhum pedido pendente. Os pedidos novos da linha aparecem aqui."},
   {status:"Feito",titulo:"Pedidos feitos",check:"Chegou",proximo:"Chegou",vazio:"Nenhum pedido feito aguardando chegada."},
   {status:"Chegou",titulo:"Chegaram",check:null,proximo:null,vazio:"Nenhum pedido marcado como chegou ainda."}
 ];
-/* edicoes[id] = {local, marcado}: o que o comprador mudou e ainda não salvou */
-const st={aba:"Pendente",fSetor:"Todos",fTipo:"Todos",pedidos:[],locais:[],edicoes:{},loaded:false,error:"",sessao:null,salvando:false};
+/* edicoes[id] = {local, outro, outroTexto, marcado}: o que ainda não foi salvo */
+const st={aba:"Pendente",fSetor:"Todos",fTipo:"Todos",pedidos:[],locais:[],edicoes:{},invalidos:new Set(),
+  editando:null,ocupado:null,hoje:"",loaded:false,error:"",sessao:null,salvando:false};
 const $=id=>document.getElementById(id);
+const hojeLocal=()=>new Date().toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"});
+const diaDe=ms=>new Date(ms).toLocaleDateString("en-CA",{timeZone:"America/Sao_Paulo"});
 
 function ler(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function gravar(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
@@ -91,30 +116,40 @@ async function api(body){
   const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(body)});
   return r.json();
 }
+function auth(extra){return Object.assign({usuario:st.sessao.usuario,token:st.sessao.token},extra)}
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e}
 function chip(label,pressed,onClick,count){
-  const b=document.createElement("button");b.type="button";b.className="chip";
-  b.setAttribute("aria-pressed",pressed?"true":"false");b.textContent=label;
-  if(count!==undefined){const n=document.createElement("span");n.className="n";n.textContent=count;b.appendChild(n)}
+  const b=el("button","chip",label);b.type="button";b.setAttribute("aria-pressed",pressed?"true":"false");
+  if(count!==undefined)b.appendChild(el("span","n",count));
   b.onclick=onClick;return b;
 }
+function botao(txt,cls,fn){const b=el("button","btn"+(cls?" "+cls:""),txt);b.type="button";b.onclick=fn;return b}
 function fmt(ms){if(!ms)return"";const d=new Date(ms);
   return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}
-function vazio(titulo,texto){
-  const e=document.createElement("div");e.className="empty";const h=document.createElement("strong");
-  h.textContent=titulo;e.append(h,texto);return e;
-}
+function qtd(p){return p.quantidade===""||p.quantidade==null?"":String(p.quantidade).replace(".",",")+" "+(p.unidade||"")}
+function vazio(titulo,texto){const e=el("div","empty");e.append(el("strong",null,titulo),texto);return e}
+function selectDe(id,opcoes,valor){const s=el("select");s.id=id;opcoes.forEach(o=>{const op=el("option",null,o);op.value=o;s.appendChild(op)});s.value=valor;return s}
 
-/* Quais alterações vão para a planilha ao tocar em Salvar */
+/* O que vai para a planilha ao tocar em Salvar */
 function alteracoes(){
   const out=[];
   st.pedidos.forEach(p=>{
     const ed=st.edicoes[p.id];if(!ed)return;
-    const aba=ABAS.find(a=>a.status===p.status);
-    const local=ed.local!==undefined?ed.local:p.local;
-    const status=ed.marcado&&aba&&aba.proximo?aba.proximo:p.status;
-    if(local!==p.local||status!==p.status)out.push({id:p.id,status,local});
+    const aba=ABAS.find(a=>a.status===p.status);if(!aba||!aba.check)return;
+    let local=p.local,novoLocal=false;
+    if(p.status==="Pendente"){
+      if(ed.outro){local=(ed.outroTexto||"").trim();novoLocal=!!local}
+      else if(ed.local!==undefined)local=ed.local;
+    }
+    const status=ed.marcado?aba.proximo:p.status;
+    if(local!==p.local||status!==p.status)out.push({id:p.id,status,local,novoLocal,produto:p.produto});
   });
   return out;
+}
+
+function ordenar(lista,status){
+  const k=status==="Feito"?"feitoEm":status==="Chegou"?"chegouEm":"data";
+  return lista.slice().sort((a,b)=>(b[k]||b.data)-(a[k]||a.data));
 }
 
 function render(){
@@ -122,13 +157,14 @@ function render(){
   $("login").hidden=logado;$("main").hidden=!logado;$("who").hidden=!logado;
   if(!logado)return;
   $("who-nome").textContent=st.sessao.nome;
+  $("ir-linha").hidden=!st.sessao.mestre;
 
   const A=$("abas");A.replaceChildren();
   ABAS.forEach(a=>{
-    const b=document.createElement("button");b.type="button";b.setAttribute("role","tab");
-    b.setAttribute("aria-selected",a.status===st.aba?"true":"false");b.textContent=a.titulo;
-    const n=document.createElement("span");n.className="n";n.textContent=st.pedidos.filter(p=>p.status===a.status).length;
-    b.appendChild(n);b.onclick=()=>{st.aba=a.status;render()};A.appendChild(b);
+    const b=el("button",null,a.titulo);b.type="button";b.setAttribute("role","tab");
+    b.setAttribute("aria-selected",a.status===st.aba?"true":"false");
+    b.appendChild(el("span","n",st.pedidos.filter(p=>p.status===a.status).length));
+    b.onclick=()=>{st.aba=a.status;st.editando=null;render()};A.appendChild(b);
   });
 
   const daAba=st.pedidos.filter(p=>p.status===st.aba);
@@ -138,12 +174,24 @@ function render(){
   ["Todos",...TIPOS].forEach(t=>FT.appendChild(chip(t,t===st.fTipo,()=>{st.fTipo=t;render()})));
 
   const aba=ABAS.find(a=>a.status===st.aba);
-  const list=daAba.filter(p=>(st.fSetor==="Todos"||p.setor===st.fSetor)&&(st.fTipo==="Todos"||p.tipo===st.fTipo));
+  const list=ordenar(daAba.filter(p=>(st.fSetor==="Todos"||p.setor===st.fSetor)&&(st.fTipo==="Todos"||p.tipo===st.fTipo)),st.aba);
   const L=$("lista");const topo=L.scrollTop;L.replaceChildren();
   if(st.error)L.appendChild(vazio("Sem conexão",st.error));
   else if(!st.loaded)L.appendChild(vazio("Carregando","Buscando os pedidos…"));
   else if(!list.length)L.appendChild(vazio("Nada aqui",daAba.length?"Nenhum pedido com esses filtros.":aba.vazio));
-  else list.forEach(p=>L.appendChild(cartao(p,aba)));
+  else if(st.aba==="Pendente"){
+    const hoje=st.hoje||hojeLocal();
+    const novos=list.filter(p=>diaDe(p.data)>=hoje),antigos=list.filter(p=>diaDe(p.data)<hoje);
+    novos.forEach(p=>L.appendChild(cartao(p,aba)));
+    if(antigos.length){
+      const todosAntigos=daAba.filter(p=>diaDe(p.data)<hoje).length;
+      const dv=el("div","divisor");
+      dv.append(el("span","label","Pedidos de dias anteriores ("+antigos.length+")"),
+        botao(st.ocupado==="antigos"?"Apagando…":"Apagar pedidos antigos ("+todosAntigos+")","perigo",apagarAntigos));
+      L.appendChild(dv);
+      antigos.forEach(p=>L.appendChild(cartao(p,aba)));
+    }
+  }else list.forEach(p=>L.appendChild(cartao(p,aba)));
   L.scrollTop=topo;
 
   const n=alteracoes().length;
@@ -154,74 +202,157 @@ function render(){
 
 function cartao(p,aba){
   const ed=st.edicoes[p.id]||{};
-  const c=document.createElement("div");c.className="pedido"+(ed.marcado?" marcado":"");
-  const corpo=document.createElement("div");corpo.className="corpo";
-  const meta=document.createElement("div");meta.className="meta";
-  const ts=document.createElement("span");ts.className="tag";ts.textContent=p.setor;
-  const tt=document.createElement("span");tt.className="tag "+p.tipo;tt.textContent=p.tipo;
-  const who=document.createElement("span");who.textContent=(p.nome||p.usuario||"Alguém")+" · "+fmt(p.data);
-  meta.append(ts,tt,who);
-  const tx=document.createElement("div");tx.className="text";tx.textContent=p.texto;
-  corpo.append(meta,tx);c.appendChild(corpo);
+  const c=el("div","pedido"+(ed.marcado?" marcado":"")+(st.invalidos.has(p.id)?" invalido":""));
+  const corpo=el("div","corpo");
+  const meta=el("div","meta");
+  meta.append(el("span","tag",p.setor),el("span","tag "+p.tipo,p.tipo),el("span",null,(p.nome||p.usuario||"Alguém")+" · "+fmt(p.data)));
+  const lp=el("div","linha-produto");lp.append(el("span","produto",p.produto),el("span","qtd",qtd(p)));
+  corpo.append(meta,lp);c.appendChild(corpo);
 
-  const acoes=document.createElement("div");acoes.className="acoes";
-  const localAtual=ed.local!==undefined?ed.local:p.local;
-  if(aba.check){
-    const sel=document.createElement("select");sel.id="local-"+p.id;sel.setAttribute("aria-label","Local de compra");
-    const o0=document.createElement("option");o0.value="";o0.textContent=st.locais.length?"Local de compra…":"Cadastre locais na aba Locais";sel.appendChild(o0);
+  const acoes=el("div","acoes");const botoes=el("div","botoes");
+  const mestre=!!st.sessao.mestre;const ocupado=st.ocupado===p.id;
+  if(p.status==="Pendente"){
+    const sel=el("select");sel.id="local-"+p.id;sel.setAttribute("aria-label","Local de compra");
+    const o0=el("option",null,"Local de compra…");o0.value="";sel.appendChild(o0);
     const opcoes=st.locais.slice();if(p.local&&!opcoes.includes(p.local))opcoes.push(p.local);
-    opcoes.forEach(l=>{const o=document.createElement("option");o.value=l;o.textContent=l;sel.appendChild(o)});
-    sel.value=localAtual;
-    sel.onchange=()=>{st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{local:sel.value});render()};
-    const lab=document.createElement("label");lab.className="check";
-    const cb=document.createElement("input");cb.type="checkbox";cb.id="check-"+p.id;cb.checked=!!ed.marcado;
-    cb.onchange=()=>{st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{marcado:cb.checked});render()};
-    lab.append(cb,aba.check);
-    acoes.append(sel,lab);
+    opcoes.forEach(l=>{const o=el("option",null,l);o.value=l;sel.appendChild(o)});
+    const oo=el("option",null,"+ Outro local…");oo.value=OUTRO;sel.appendChild(oo);
+    sel.value=ed.outro?OUTRO:(ed.local!==undefined?ed.local:p.local);
+    sel.onchange=()=>{const o=sel.value===OUTRO;st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{outro:o,local:o?undefined:sel.value});st.invalidos.delete(p.id);render();if(o){const i=document.getElementById("outro-"+p.id);if(i)i.focus()}};
+    acoes.appendChild(sel);
+    if(ed.outro){
+      const inp=el("input");inp.type="text";inp.id="outro-"+p.id;inp.placeholder="Nome do novo local";inp.maxLength=200;inp.value=ed.outroTexto||"";
+      inp.oninput=()=>{st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{outroTexto:inp.value});st.invalidos.delete(p.id);atualizarRodape()};
+      acoes.appendChild(inp);
+    }
   }else{
-    const f=document.createElement("div");f.className="local-fixo";
-    f.append("Comprado em: ");const b=document.createElement("strong");b.textContent=p.local||"não informado";f.appendChild(b);
-    acoes.appendChild(f);
+    const info=el("div","info");info.append("Comprado em: ",el("strong",null,p.local||"não informado"));
+    if(p.status==="Feito"&&p.feitoEm)info.append(" · feito "+fmt(p.feitoEm));
+    if(p.status==="Chegou"&&p.chegouEm)info.append(" · chegou "+fmt(p.chegouEm));
+    acoes.appendChild(info);
   }
+  if(aba.check){
+    const lab=el("label","check");const cb=el("input");cb.type="checkbox";cb.id="check-"+p.id;cb.checked=!!ed.marcado;
+    cb.onchange=()=>{st.edicoes[p.id]=Object.assign({},st.edicoes[p.id],{marcado:cb.checked});st.invalidos.delete(p.id);render()};
+    lab.append(cb,aba.check);acoes.appendChild(lab);
+  }
+  if(p.status==="Feito")botoes.appendChild(botao(ocupado?"Voltando…":"Voltar p/ pendente","",()=>voltar(p)));
+  if(mestre)botoes.appendChild(botao("Editar","",()=>{st.editando=p.id;render()}));
+  if(p.status==="Pendente"||mestre)botoes.appendChild(botao(ocupado?"Apagando…":"Apagar","perigo",()=>apagar(p)));
+  if(botoes.children.length)acoes.appendChild(botoes);
   c.appendChild(acoes);
+
+  if(mestre&&st.editando===p.id)c.appendChild(formEdicao(p));
   return c;
 }
 
-let carregando=false;
-async function carregar(){
-  if(!st.sessao||carregando||st.salvando)return;carregando=true;
+function formEdicao(p){
+  const f=el("div","editar");const pre="e-"+p.id+"-";
+  const campo=(rot,ctrl)=>{const l=el("label");l.append(el("span","label",rot),ctrl);f.appendChild(l);return ctrl};
+  const prod=el("input");prod.id=pre+"produto";prod.value=p.produto;prod.maxLength=200;campo("Produto",prod);
+  const q=el("input");q.id=pre+"qtd";q.inputMode="decimal";q.value=p.quantidade===""||p.quantidade==null?"":String(p.quantidade).replace(".",",");campo("Quantidade",q);
+  const un=campo("Unidade",selectDe(pre+"un",UNIDADES,UNIDADES.includes(p.unidade)?p.unidade:"Un"));
+  const se=campo("Setor",selectDe(pre+"setor",SETORES,p.setor));
+  const ti=campo("Tipo",selectDe(pre+"tipo",TIPOS,p.tipo));
+  const sta=campo("Status",selectDe(pre+"status",STATUS,p.status));
+  const lo=el("select");lo.id=pre+"local";const o0=el("option",null,"Sem local");o0.value="";lo.appendChild(o0);
+  const ops=st.locais.slice();if(p.local&&!ops.includes(p.local))ops.push(p.local);
+  ops.forEach(l=>{const o=el("option",null,l);o.value=l;lo.appendChild(o)});lo.value=p.local;campo("Local de compra",lo);
+  const bt=el("div","botoes");
+  bt.append(botao("Cancelar","",()=>{st.editando=null;render()}),
+    botao(st.ocupado===p.id?"Salvando…":"Salvar edição","",async()=>{
+      const n=Number(q.value.replace(",","."));const s=$("status");
+      if(!prod.value.trim()||!isFinite(n)||n<=0){s.className="status err";s.textContent="Preencha produto e uma quantidade maior que zero.";return}
+      await acao(p.id,{acao:"editar",id:p.id,campos:{produto:prod.value.trim(),quantidade:n,unidade:un.value,setor:se.value,tipo:ti.value,status:sta.value,local:lo.value}},"Pedido editado.");
+      st.editando=null;render();
+    }));
+  f.appendChild(bt);return f;
+}
+
+function atualizarRodape(){const n=alteracoes().length;$("salvar").disabled=!n||st.salvando;$("salvar").textContent=n?"Salvar ("+n+")":"Salvar"}
+
+async function acao(ocupado,body,okMsg){
+  const s=$("status");st.ocupado=ocupado;render();
   try{
-    const j=await api({acao:"listar",pagina:"comprador",usuario:st.sessao.usuario,token:st.sessao.token});
+    const j=await api(auth(body));
+    if(j.sessao){st.ocupado=null;sair(j.erro);return null}
+    s.className=j.ok?"status":"status err";s.textContent=j.ok?(typeof okMsg==="function"?okMsg(j):okMsg):(j.erro||"Não foi possível concluir.");
+    st.ocupado=null;await carregar(true);return j;
+  }catch(e){s.className="status err";s.textContent="Sem conexão com a planilha. Tente de novo.";st.ocupado=null;render();return null}
+}
+function apagar(p){if(confirm('Apagar o pedido "'+p.produto+'"?'))acao(p.id,{acao:"apagar",ids:[p.id]},"Pedido apagado.")}
+function voltar(p){acao(p.id,{acao:"voltar",id:p.id},"Pedido voltou para Pendentes.")}
+function apagarAntigos(){
+  const hoje=st.hoje||hojeLocal();
+  const n=st.pedidos.filter(p=>p.status==="Pendente"&&diaDe(p.data)<hoje).length;
+  if(!n||!confirm("Apagar "+n+" pedido(s) pendente(s) de dias anteriores?"))return;
+  acao("antigos",{acao:"apagarAntigos"},j=>j.apagados+" pedido(s) antigo(s) apagado(s).");
+}
+
+let carregando=false;
+async function carregar(forcar){
+  if(!st.sessao||(carregando&&!forcar)||st.salvando)return;carregando=true;
+  try{
+    const j=await api(auth({acao:"listar",pagina:"comprador"}));
     if(j.sessao){carregando=false;sair(j.erro);return}
     if(!j.ok){carregando=false;sair(j.erro||"Não foi possível entrar.");return}
-    st.sessao.nome=j.perfil.nome;salvarSessao();
+    Object.assign(st.sessao,j.perfil);salvarSessao();
+    st.hoje=j.hoje||"";
     st.pedidos=(j.pedidos||[]).filter(p=>SETORES.includes(p.setor)&&TIPOS.includes(p.tipo));
     st.locais=j.locais||[];
-    /* descarta edições de pedidos que mudaram de aba por outro aparelho */
-    const vivos=new Set(st.pedidos.map(p=>p.id));
-    Object.keys(st.edicoes).forEach(id=>{if(!vivos.has(id))delete st.edicoes[id]});
+    const porId={};st.pedidos.forEach(p=>porId[p.id]=p);
+    Object.keys(st.edicoes).forEach(id=>{if(!porId[id])delete st.edicoes[id]});
+    if(st.editando&&!porId[st.editando])st.editando=null;
     st.error="";
   }catch(e){if(!st.pedidos.length)st.error="Não foi possível carregar os pedidos. Verifique a internet."}
-  carregando=false;st.loaded=true;render();
+  carregando=false;st.loaded=true;
+  const ativo=document.activeElement;
+  if(!st.editando&&!(ativo&&$("lista").contains(ativo)&&/INPUT|SELECT/.test(ativo.tagName)))render();
 }
 
 $("salvar").onclick=async()=>{
   const lista=alteracoes();const s=$("status");if(!lista.length)return;
+  const semLocal=lista.filter(a=>a.status==="Feito"&&!a.local);
+  if(semLocal.length){
+    semLocal.forEach(a=>st.invalidos.add(a.id));render();
+    s.className="status err";s.textContent="Escolha o local de compra antes de marcar \"Compra acertada\" ("+semLocal.length+" pedido(s) em vermelho).";
+    return;
+  }
   st.salvando=true;render();s.className="status";s.textContent="Salvando…";
   try{
-    const j=await api({acao:"salvar",usuario:st.sessao.usuario,token:st.sessao.token,alteracoes:lista});
+    const j=await api(auth({acao:"salvar",alteracoes:lista.map(({produto,...a})=>a)}));
     if(j.sessao){st.salvando=false;sair(j.erro);return}
     if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi salvo. Tente de novo."}
     else{
       lista.forEach(a=>delete st.edicoes[a.id]);
-      s.textContent=j.salvos===1?"1 pedido salvo.":j.salvos+" pedidos salvos.";
+      let m=j.salvos===1?"1 pedido salvo.":j.salvos+" pedidos salvos.";
+      if(j.recusados&&j.recusados.length){s.className="status err";m+=" Não salvos (sem local de compra): "+j.recusados.join(", ")}
+      s.textContent=m;
     }
   }catch(e){s.className="status err";s.textContent="Não foi salvo: sem conexão com a planilha. Tente de novo."}
-  st.salvando=false;await carregar();
+  st.salvando=false;await carregar(true);
+};
+
+$("gerar").onclick=async()=>{
+  const r=$("g-resultado");const b=$("gerar");const diaSel=$("g-dia").value||hojeLocal();
+  b.disabled=true;b.textContent="Gerando…";r.hidden=false;r.replaceChildren(el("span","info","Gerando os arquivos na pasta do Drive. Pode levar alguns segundos…"));
+  try{
+    const j=await api(auth({acao:"gerar",dia:diaSel}));
+    r.replaceChildren();
+    if(j.sessao){sair(j.erro);return}
+    if(!j.ok)r.appendChild(el("span","status err",j.erro||"Não foi possível gerar."));
+    else if(!j.arquivos.length)r.appendChild(el("span","info","Nenhum pedido feito ou chegado nesse dia."));
+    else{
+      r.appendChild(el("span","info",j.feitos+" feito(s) e "+j.chegaram+" chegado(s). Arquivos salvos no Drive:"));
+      j.arquivos.forEach(a=>{const l=el("a",null,a.nome);l.href=a.url;l.target="_blank";l.rel="noopener";r.appendChild(l)});
+      if(j.pasta){const l=el("a",null,"Abrir pasta do dia");l.href=j.pasta;l.target="_blank";l.rel="noopener";r.appendChild(l)}
+    }
+  }catch(e){r.replaceChildren(el("span","status err","Sem conexão com a planilha. Tente de novo."))}
+  b.disabled=false;b.textContent="Gerar PDF e Excel";
 };
 
 function sair(msg){
-  st.sessao=null;st.pedidos=[];st.edicoes={};st.loaded=false;salvarSessao();
+  st.sessao=null;st.pedidos=[];st.edicoes={};st.editando=null;st.loaded=false;salvarSessao();
   const s=$("l-status");s.className=msg?"status err":"status";s.textContent=msg||"";render();
 }
 $("sair").onclick=()=>sair();
@@ -233,12 +364,14 @@ $("login-form").addEventListener("submit",async e=>{
   try{
     const j=await api({acao:"login",usuario:u,senha:p});
     if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi possível entrar."}
+    else if(!j.perfil){s.className="status err";s.textContent="A planilha está com o código antigo. Publique a nova versão do Apps Script."}
     else if(!j.perfil.comprador){s.className="status err";s.textContent="Este usuário não tem acesso de comprador."}
-    else{st.sessao=j.perfil;salvarSessao();$("l-senha").value="";s.textContent="";render();carregar()}
+    else{st.sessao=j.perfil;salvarSessao();$("l-senha").value="";s.textContent="";render();carregar(true)}
   }catch(err){s.className="status err";s.textContent="Sem conexão com a planilha. Tente de novo."}
   $("l-entrar").disabled=false;
 });
 
+$("g-dia").value=hojeLocal();
 render();
 carregar();
 setInterval(()=>{if(!document.hidden)carregar()},ATUALIZAR_A_CADA_MS);
