@@ -30,6 +30,9 @@
 .msg .linha-produto{display:flex;gap:10px;align-items:baseline;justify-content:space-between}
 .msg .rodape-msg{display:flex;justify-content:flex-end}
 .msg.temp{opacity:.65}
+.cod{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.produto-bloco{display:flex;flex-direction:column;gap:2px;min-width:0}
+#tipo-fixo{font-size:13px;color:var(--muted)}
 @media (max-width:520px){#form .campos{grid-template-columns:minmax(0,1fr) 108px}#form .unid{grid-column:1 / -1}}
 </style>
 </head>
@@ -64,6 +67,7 @@
 
     <form id="form" novalidate autocomplete="off">
       <div class="chips" id="tipos" role="group" aria-label="Tipo do item"></div>
+      <div id="tipo-fixo" hidden></div>
       <div class="campos">
         <div class="campo combo">
           <label class="label" for="produto">Produto</label>
@@ -90,11 +94,11 @@ const API_URL = "https://script.google.com/macros/s/AKfycbwxP76a2x7Q92bsODviNs9_
 const ATUALIZAR_A_CADA_MS = 15000;
 const PRODUTOS_A_CADA_MS = 5 * 60 * 1000;
 const CHAVE_SESSAO = "pedidos.sessao";
-const CHAVE_PRODUTOS = "pedidos.produtos";
+const CHAVE_PRODUTOS = "pedidos.produtos.v2";
 
 const TIPOS=["Embalagem","Insumo"];
 const UNIDADES=["Kg","Un"];
-const st={setor:null,tipo:"Embalagem",unidade:"Kg",msgs:[],enviando:[],ocultos:new Set(),
+const st={setor:null,tipo:"Insumo",unidade:"Kg",escolhido:null,msgs:[],enviando:[],ocultos:new Set(),
   produtos:{},produtosEm:0,loaded:false,error:"",sessao:null};
 const $=id=>document.getElementById(id);
 
@@ -127,6 +131,10 @@ function status(msg,erro){const s=$("status");s.className=erro?"status err":"sta
 
 /* ---------- escolhas (tipo e unidade): redesenhadas sem mexer nos campos de texto ---------- */
 function renderEscolhas(){
+  /* produto da lista: o tipo vem da aba (fixo). Produto novo: a pessoa escolhe. */
+  const fixo=!!st.escolhido;
+  $("tipos").hidden=fixo;$("tipo-fixo").hidden=!fixo;
+  if(fixo)$("tipo-fixo").textContent="Tipo: "+st.escolhido.tipo+" (da lista de produtos)";
   const TP=$("tipos");TP.replaceChildren();
   TIPOS.forEach(t=>TP.appendChild(chip(t,t===st.tipo,()=>{st.tipo=t;renderEscolhas()})));
   const UN=$("unidades");UN.replaceChildren();
@@ -159,7 +167,7 @@ function desenharSugestoes(){
     const li=el("li",o.novo?"criar":"");li.setAttribute("role","option");li.id="opt-"+i;
     if(i===ativo){li.classList.add("ativo");li.setAttribute("aria-selected","true")}
     if(o.novo){li.append("+ Produto novo: “"+o.novo+"”")}
-    else{li.append(el("span",null,o.p.produto),el("small",null,[o.p.tipo,o.p.unidade].filter(Boolean).join(" · ")))}
+    else{li.append(el("span",null,o.p.produto),el("small",null,o.p.tipo))}
     li.onclick=()=>escolher(o);
     ul.appendChild(li);
   });
@@ -169,12 +177,12 @@ function desenharSugestoes(){
 }
 function fecharSugestoes(){ul.hidden=true;inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant")}
 function escolher(o){
-  if(o.p){inp.value=o.p.produto;if(o.p.tipo)st.tipo=o.p.tipo;st.unidade=o.p.unidade||"Kg"}
-  else inp.value=o.novo;
+  if(o.p){inp.value=o.p.produto;st.escolhido=o.p;st.tipo=o.p.tipo}
+  else{inp.value=o.novo;st.escolhido=null}
   fecharSugestoes();renderEscolhas();$("quantidade").focus();
 }
 ul.addEventListener("mousedown",e=>e.preventDefault()); /* não perde o foco ao tocar na lista */
-inp.addEventListener("input",()=>abrirSugestoes(false));
+inp.addEventListener("input",()=>{if(st.escolhido){st.escolhido=null;renderEscolhas()}abrirSugestoes(false)});
 inp.addEventListener("focus",()=>abrirSugestoes(false));
 inp.addEventListener("blur",()=>setTimeout(fecharSugestoes,120));
 inp.addEventListener("keydown",e=>{
@@ -199,7 +207,9 @@ function cartao(m,me){
   meta.appendChild(el("span","tag "+m.tipo,m.tipo));
   if(m.novo)meta.appendChild(el("span","tag novo","Produto novo"));
   meta.appendChild(el("span",null,(m.nome||m.usuario||"Alguém")+" · "+(m.temp?"enviando…":fmt(m.data))));
-  const lp=el("div","linha-produto");lp.append(el("span","produto",m.produto),el("span","qtd",qtd(m)));
+  const bloco=el("div","produto-bloco");bloco.appendChild(el("span","produto",m.produto));
+  if(m.codigo)bloco.appendChild(el("span","cod","Cód. "+m.codigo));
+  const lp=el("div","linha-produto");lp.append(bloco,el("span","qtd",qtd(m)));
   d.append(meta,lp);
   if(meu&&!m.temp&&m.status==="Pendente"){
     const r=el("div","rodape-msg");const b=el("button","btn perigo","Apagar");b.type="button";
@@ -219,7 +229,7 @@ function render(){
   const S=$("setores");S.replaceChildren();
   if(st.sessao.mestre&&setores.length>1){
     $("bar-label").textContent="Setor (mestre)";
-    setores.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);fecharSugestoes();render()})));
+    setores.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);fecharSugestoes();inp.value="";st.escolhido=null;renderEscolhas();render()})));
   }else{
     $("bar-label").textContent="Setor: "+(st.setor||"nenhum");
   }
@@ -301,12 +311,14 @@ $("form").addEventListener("submit",async e=>{
   const n=Number(qtdTxt.replace(",","."));
   if(!produto){status("Escolha ou digite o produto.",true);inp.focus();return}
   if(!qtdTxt||!isFinite(n)||n<=0){status("Digite uma quantidade maior que zero.",true);$("quantidade").focus();return}
-  const cad=produtosDoSetor().find(p=>norm(p.produto)===norm(produto));
-  const tmp={id:"tmp-"+Date.now()+Math.random(),temp:true,data:Date.now(),setor:st.setor,tipo:st.tipo,
-    usuario:st.sessao.usuario,nome:st.sessao.nome,produto:cad?cad.produto:produto,quantidade:n,unidade:st.unidade,status:"Pendente",novo:!cad};
+  const iguais=produtosDoSetor().filter(p=>norm(p.produto)===norm(produto));
+  const cad=(st.escolhido&&iguais.includes(st.escolhido))?st.escolhido:(iguais.find(p=>p.tipo===st.tipo)||iguais[0]);
+  const tmp={id:"tmp-"+Date.now()+Math.random(),temp:true,data:Date.now(),setor:st.setor,tipo:cad?cad.tipo:st.tipo,
+    usuario:st.sessao.usuario,nome:st.sessao.nome,produto:cad?cad.produto:produto,codigo:cad?cad.codigo:"",
+    quantidade:n,unidade:st.unidade,status:"Pendente",novo:!cad};
   st.enviando.push(tmp);
   inp.value="";$("quantidade").value="";fecharSugestoes();
-  st.unidade="Kg";renderEscolhas(); /* próximo pedido começa em Kg */
+  st.unidade="Kg";st.escolhido=null;renderEscolhas(); /* próximo pedido começa em Kg */
   const th=$("thread");render();th.scrollTop=th.scrollHeight;
   status(cad?"Enviando…":"Enviando produto novo…");
   try{
@@ -319,7 +331,10 @@ $("form").addEventListener("submit",async e=>{
     st.enviando=st.enviando.filter(x=>x!==tmp);
     status("Não foi enviado: sem conexão com a planilha. Os dados voltaram para o campo.",true);
   }
-  if(!inp.value&&!$("quantidade").value){inp.value=tmp.produto;$("quantidade").value=String(n).replace(".",",")}
+  if(!inp.value&&!$("quantidade").value){
+    inp.value=tmp.produto;$("quantidade").value=String(n).replace(".",",");st.unidade=tmp.unidade;st.tipo=tmp.tipo;
+    st.escolhido=cad||null;renderEscolhas();
+  }
   render();
 });
 
