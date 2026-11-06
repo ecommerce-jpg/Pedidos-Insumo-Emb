@@ -11,13 +11,26 @@
 <style>
 #form{border-top:1px solid var(--line);padding-block:10px 14px;display:flex;flex-direction:column;gap:8px}
 #form .campos{display:grid;grid-template-columns:minmax(0,1fr) 92px auto;gap:8px;align-items:end}
-#form label{display:flex;flex-direction:column;gap:4px;min-width:0}
+#form .campo{display:flex;flex-direction:column;gap:4px;min-width:0}
 #form input{width:100%;min-width:0}
 #unidades{flex-wrap:nowrap}
 #form .acoes-envio{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.combo{position:relative}
+.combo-box{display:flex;min-width:0}
+.combo-box input{border-top-right-radius:0;border-bottom-right-radius:0}
+.combo-box button{font:600 16px var(--f-body);border:1px solid var(--line);border-left:0;background:var(--surface);color:var(--muted);border-radius:0 10px 10px 0;padding:0 12px;cursor:pointer}
+#sugestoes{position:absolute;left:0;right:0;bottom:calc(100% + 4px);max-height:min(45vh,320px);overflow-y:auto;overscroll-behavior:contain;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.22);margin:0;padding:4px;list-style:none;z-index:5}
+#sugestoes li{padding:10px;border-radius:7px;display:flex;justify-content:space-between;gap:10px;cursor:pointer;align-items:baseline}
+#sugestoes li small{color:var(--muted);font-size:12px;white-space:nowrap}
+#sugestoes li.ativo,#sugestoes li:hover{background:var(--accent-soft)}
+#sugestoes li.criar{color:var(--novo);font-weight:600}
+#sugestoes li.aviso{cursor:default;color:var(--muted);font-size:13px}
+#sugestoes li.aviso:hover{background:none}
 .msg .linha-produto{display:flex;gap:10px;align-items:baseline;justify-content:space-between}
 .msg .rodape-msg{display:flex;justify-content:flex-end}
-@media (max-width:520px){#form .campos{grid-template-columns:minmax(0,1fr) 84px}#form .unid{grid-column:1 / -1}}
+.msg.temp{opacity:.65}
+@media (max-width:520px){#form .campos{grid-template-columns:minmax(0,1fr) 108px}#form .unid{grid-column:1 / -1}}
 </style>
 </head>
 <body>
@@ -49,11 +62,18 @@
 
     <div class="thread" id="thread" aria-live="polite"></div>
 
-    <form id="form" novalidate>
+    <form id="form" novalidate autocomplete="off">
       <div class="chips" id="tipos" role="group" aria-label="Tipo do item"></div>
       <div class="campos">
-        <label><span class="label">Produto</span><input id="produto" maxlength="200" autocomplete="off" placeholder="Ex.: Bandeja de isopor P"></label>
-        <label><span class="label">Quantidade</span><input id="quantidade" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+        <div class="campo combo">
+          <label class="label" for="produto">Produto</label>
+          <div class="combo-box">
+            <input id="produto" maxlength="200" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugestoes" placeholder="Digite ou escolha da lista">
+            <button type="button" id="abrir-lista" aria-label="Ver todos os produtos">▾</button>
+          </div>
+          <ul id="sugestoes" role="listbox" hidden></ul>
+        </div>
+        <div class="campo"><label class="label" for="quantidade">Quantidade</label><input id="quantidade" inputmode="decimal" placeholder="0"></div>
         <div class="unid"><div class="chips" id="unidades" role="group" aria-label="Unidade"></div></div>
       </div>
       <div class="acoes-envio">
@@ -68,16 +88,20 @@
 /* Link do App da Web do Apps Script */
 const API_URL = "https://script.google.com/macros/s/AKfycbwxP76a2x7Q92bsODviNs9_Qy7luDk_jdI7wydvWivpZLA8M6HqI9cX9yyvvAImElUY/exec";
 const ATUALIZAR_A_CADA_MS = 15000;
+const PRODUTOS_A_CADA_MS = 5 * 60 * 1000;
 const CHAVE_SESSAO = "pedidos.sessao";
+const CHAVE_PRODUTOS = "pedidos.produtos";
 
 const TIPOS=["Embalagem","Insumo"];
 const UNIDADES=["Kg","Un"];
-const st={setor:null,tipo:"Embalagem",unidade:"Un",msgs:[],loaded:false,error:"",sessao:null,apagando:null};
+const st={setor:null,tipo:"Embalagem",unidade:"Kg",msgs:[],enviando:[],ocultos:new Set(),
+  produtos:{},produtosEm:0,loaded:false,error:"",sessao:null};
 const $=id=>document.getElementById(id);
 
 function ler(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function gravar(k,v){try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
 try{const x=JSON.parse(ler(CHAVE_SESSAO)||"null");if(x&&x.usuario&&x.token)st.sessao=x}catch(e){}
+try{const x=JSON.parse(ler(CHAVE_PRODUTOS)||"null");if(x&&st.sessao&&x.usuario===st.sessao.usuario)st.produtos=x.produtos||{}}catch(e){}
 function salvarSessao(){gravar(CHAVE_SESSAO,st.sessao?JSON.stringify(st.sessao):null)}
 
 async function api(body){
@@ -90,16 +114,98 @@ function escolherSetor(){
   const lembrado=ler("pedidos.setor");
   if(!s.includes(st.setor))st.setor=s.includes(lembrado)?lembrado:(s[0]||null);
 }
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e}
 function chip(label,pressed,onClick){
-  const b=document.createElement("button");b.type="button";b.className="chip";
-  b.setAttribute("aria-pressed",pressed?"true":"false");b.textContent=label;b.onclick=onClick;return b;
+  const b=el("button","chip",label);b.type="button";b.setAttribute("aria-pressed",pressed?"true":"false");b.onclick=onClick;return b;
 }
 function fmt(ms){if(!ms)return"";const d=new Date(ms);
   return d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})}
 function qtd(m){return m.quantidade===""||m.quantidade==null?"":String(m.quantidade).replace(".",",")+" "+(m.unidade||"")}
-function vazio(titulo,texto){
-  const e=document.createElement("div");e.className="empty";const h=document.createElement("strong");
-  h.textContent=titulo;e.append(h,texto);return e;
+function vazio(titulo,texto){const e=el("div","empty");e.append(el("strong",null,titulo),texto);return e}
+const norm=s=>String(s).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+function status(msg,erro){const s=$("status");s.className=erro?"status err":"status";s.textContent=msg||""}
+
+/* ---------- escolhas (tipo e unidade): redesenhadas sem mexer nos campos de texto ---------- */
+function renderEscolhas(){
+  const TP=$("tipos");TP.replaceChildren();
+  TIPOS.forEach(t=>TP.appendChild(chip(t,t===st.tipo,()=>{st.tipo=t;renderEscolhas()})));
+  const UN=$("unidades");UN.replaceChildren();
+  UNIDADES.forEach(u=>UN.appendChild(chip(u,u===st.unidade,()=>{st.unidade=u;renderEscolhas()})));
+}
+
+/* ---------- campo de produto: digitar filtra, ▾ mostra a lista toda ---------- */
+const inp=$("produto"),ul=$("sugestoes");
+let opcoes=[],ativo=-1;
+function produtosDoSetor(){return st.produtos[st.setor]||[]}
+function abrirSugestoes(todos){
+  const q=todos?"":norm(inp.value);
+  const lista=produtosDoSetor();
+  let f=q?lista.filter(p=>norm(p.produto).includes(q)):lista.slice();
+  if(q)f.sort((a,b)=>(norm(b.produto).startsWith(q)?1:0)-(norm(a.produto).startsWith(q)?1:0));
+  opcoes=f.slice(0,300).map(p=>({p}));
+  const texto=inp.value.trim();
+  if(texto&&!lista.some(p=>norm(p.produto)===norm(texto)))opcoes.push({novo:texto});
+  ativo=opcoes.length&&q?0:-1;
+  desenharSugestoes();
+}
+function desenharSugestoes(){
+  ul.replaceChildren();
+  if(!opcoes.length){
+    ul.appendChild(el("li","aviso",produtosDoSetor().length
+      ?"Nenhum produto com esse nome."
+      :"Ainda não há produtos cadastrados para "+(st.setor||"este setor")+". Digite o nome para pedir como produto novo."));
+  }
+  opcoes.forEach((o,i)=>{
+    const li=el("li",o.novo?"criar":"");li.setAttribute("role","option");li.id="opt-"+i;
+    if(i===ativo){li.classList.add("ativo");li.setAttribute("aria-selected","true")}
+    if(o.novo){li.append("+ Produto novo: “"+o.novo+"”")}
+    else{li.append(el("span",null,o.p.produto),el("small",null,[o.p.tipo,o.p.unidade].filter(Boolean).join(" · ")))}
+    li.onclick=()=>escolher(o);
+    ul.appendChild(li);
+  });
+  ul.hidden=false;inp.setAttribute("aria-expanded","true");
+  if(ativo>=0){inp.setAttribute("aria-activedescendant","opt-"+ativo);const a=$("opt-"+ativo);if(a)a.scrollIntoView({block:"nearest"})}
+  else inp.removeAttribute("aria-activedescendant");
+}
+function fecharSugestoes(){ul.hidden=true;inp.setAttribute("aria-expanded","false");inp.removeAttribute("aria-activedescendant")}
+function escolher(o){
+  if(o.p){inp.value=o.p.produto;if(o.p.tipo)st.tipo=o.p.tipo;st.unidade=o.p.unidade||"Kg"}
+  else inp.value=o.novo;
+  fecharSugestoes();renderEscolhas();$("quantidade").focus();
+}
+ul.addEventListener("mousedown",e=>e.preventDefault()); /* não perde o foco ao tocar na lista */
+inp.addEventListener("input",()=>abrirSugestoes(false));
+inp.addEventListener("focus",()=>abrirSugestoes(false));
+inp.addEventListener("blur",()=>setTimeout(fecharSugestoes,120));
+inp.addEventListener("keydown",e=>{
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+    if(ul.hidden)abrirSugestoes(false);
+    if(!opcoes.length)return;e.preventDefault();
+    ativo=(ativo+(e.key==="ArrowDown"?1:-1)+opcoes.length)%opcoes.length;desenharSugestoes();
+  }else if(e.key==="Enter"){
+    e.preventDefault();
+    if(!ul.hidden&&ativo>=0)escolher(opcoes[ativo]);else{fecharSugestoes();$("quantidade").focus()}
+  }else if(e.key==="Escape")fecharSugestoes();
+});
+$("abrir-lista").addEventListener("mousedown",e=>e.preventDefault());
+$("abrir-lista").onclick=()=>{if(!ul.hidden&&document.activeElement===inp){fecharSugestoes();return}inp.focus();abrirSugestoes(true)};
+$("quantidade").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();$("form").requestSubmit()}});
+
+/* ---------- conversa ---------- */
+function cartao(m,me){
+  const meu=String(m.usuario).toLowerCase()===me;
+  const d=el("div","msg"+(meu?" mine":"")+(m.temp?" temp":""));
+  const meta=el("div","meta");
+  meta.appendChild(el("span","tag "+m.tipo,m.tipo));
+  if(m.novo)meta.appendChild(el("span","tag novo","Produto novo"));
+  meta.appendChild(el("span",null,(m.nome||m.usuario||"Alguém")+" · "+(m.temp?"enviando…":fmt(m.data))));
+  const lp=el("div","linha-produto");lp.append(el("span","produto",m.produto),el("span","qtd",qtd(m)));
+  d.append(meta,lp);
+  if(meu&&!m.temp&&m.status==="Pendente"){
+    const r=el("div","rodape-msg");const b=el("button","btn perigo","Apagar");b.type="button";
+    b.onclick=()=>apagar(m);r.appendChild(b);d.appendChild(r);
+  }
+  return d;
 }
 
 function render(){
@@ -113,51 +219,26 @@ function render(){
   const S=$("setores");S.replaceChildren();
   if(st.sessao.mestre&&setores.length>1){
     $("bar-label").textContent="Setor (mestre)";
-    setores.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);render()})));
+    setores.forEach(s=>S.appendChild(chip(s,s===st.setor,()=>{st.setor=s;gravar("pedidos.setor",s);fecharSugestoes();render()})));
   }else{
     $("bar-label").textContent="Setor: "+(st.setor||"nenhum");
   }
-  const TP=$("tipos");TP.replaceChildren();
-  TIPOS.forEach(t=>TP.appendChild(chip(t,t===st.tipo,()=>{st.tipo=t;render()})));
-  const UN=$("unidades");UN.replaceChildren();
-  UNIDADES.forEach(u=>UN.appendChild(chip(u,u===st.unidade,()=>{st.unidade=u;render()})));
   $("form").hidden=!st.setor;
 
   const th=$("thread");const atBottom=th.scrollHeight-th.scrollTop-th.clientHeight<40;th.replaceChildren();
-  const list=st.msgs.filter(m=>m.setor===st.setor);
+  const list=st.msgs.filter(m=>m.setor===st.setor&&!st.ocultos.has(m.id)).concat(st.enviando.filter(m=>m.setor===st.setor));
   if(!setores.length){
     th.appendChild(vazio("Sem setor",st.sessao.comprador
       ?"Este usuário é de comprador. Use a página do comprador."
       :"Seu usuário ainda não tem setor cadastrado. Fale com o administrativo."));
-  }else if(st.error)th.appendChild(vazio("Sem conexão",st.error));
-  else if(!st.loaded)th.appendChild(vazio("Carregando","Buscando os pedidos…"));
-  else if(!list.length)th.appendChild(vazio("Nenhum pedido","Ainda não há pedidos de "+st.setor+". Preencha o produto e a quantidade abaixo e toque em Enviar."));
-  else{
-    const me=st.sessao.usuario.toLowerCase();
-    list.forEach(m=>{
-      const meu=String(m.usuario).toLowerCase()===me;
-      const d=document.createElement("div");d.className="msg"+(meu?" mine":"");
-      const meta=document.createElement("div");meta.className="meta";
-      const tt=document.createElement("span");tt.className="tag "+m.tipo;tt.textContent=m.tipo;
-      const who=document.createElement("span");who.textContent=(m.nome||m.usuario||"Alguém")+" · "+fmt(m.data);
-      meta.append(tt,who);
-      const lp=document.createElement("div");lp.className="linha-produto";
-      const pr=document.createElement("span");pr.className="produto";pr.textContent=m.produto;
-      const q=document.createElement("span");q.className="qtd";q.textContent=qtd(m);
-      lp.append(pr,q);
-      d.append(meta,lp);
-      if(meu&&m.status==="Pendente"){
-        const r=document.createElement("div");r.className="rodape-msg";
-        const b=document.createElement("button");b.type="button";b.className="btn perigo";
-        b.textContent=st.apagando===m.id?"Apagando…":"Apagar";b.disabled=st.apagando===m.id;
-        b.onclick=()=>apagar(m);r.appendChild(b);d.appendChild(r);
-      }
-      th.appendChild(d);
-    });
-  }
+  }else if(st.error&&!list.length)th.appendChild(vazio("Sem conexão",st.error));
+  else if(!st.loaded&&!list.length)th.appendChild(vazio("Carregando","Buscando os pedidos…"));
+  else if(!list.length)th.appendChild(vazio("Nenhum pedido","Ainda não há pedidos de "+st.setor+". Escolha o produto, a quantidade e toque em Enviar."));
+  else{const me=st.sessao.usuario.toLowerCase();list.forEach(m=>th.appendChild(cartao(m,me)))}
   if(atBottom||!render.done)th.scrollTop=th.scrollHeight;render.done=true;
 }
 
+/* ---------- servidor ---------- */
 let carregando=false;
 async function carregar(){
   if(!st.sessao||carregando)return;carregando=true;
@@ -171,20 +252,31 @@ async function carregar(){
   }catch(e){if(!st.msgs.length)st.error="Não foi possível carregar os pedidos. Verifique a internet."}
   carregando=false;st.loaded=true;render();
 }
+async function carregarProdutos(){
+  if(!st.sessao)return;
+  try{
+    const j=await api(auth({acao:"produtos"}));
+    if(j.ok&&j.produtos){
+      st.produtos=j.produtos;st.produtosEm=Date.now();
+      gravar(CHAVE_PRODUTOS,JSON.stringify({usuario:st.sessao.usuario,produtos:st.produtos}));
+      if(!ul.hidden)abrirSugestoes(false);
+    }
+  }catch(e){}
+}
 
 async function apagar(m){
   if(!confirm('Apagar o pedido "'+m.produto+'"?'))return;
-  const s=$("status");st.apagando=m.id;render();
+  st.ocultos.add(m.id);render();status("Pedido apagado.");
   try{
     const j=await api(auth({acao:"apagar",ids:[m.id]}));
-    if(j.sessao){st.apagando=null;sair(j.erro);return}
-    s.className=j.ok?"status":"status err";s.textContent=j.ok?"Pedido apagado.":(j.erro||"Não foi apagado.");
-  }catch(e){s.className="status err";s.textContent="Não foi apagado: sem conexão com a planilha."}
-  st.apagando=null;await carregar();
+    if(j.sessao){sair(j.erro);return}
+    if(!j.ok){st.ocultos.delete(m.id);status(j.erro||"Não foi apagado.",true)}
+  }catch(e){st.ocultos.delete(m.id);status("Não foi apagado: sem conexão com a planilha.",true)}
+  render();carregar();
 }
 
 function sair(msg){
-  st.sessao=null;st.msgs=[];st.loaded=false;salvarSessao();
+  st.sessao=null;st.msgs=[];st.enviando=[];st.produtos={};st.loaded=false;salvarSessao();gravar(CHAVE_PRODUTOS,null);
   const s=$("l-status");s.className=msg?"status err":"status";s.textContent=msg||"";render();
 }
 $("sair").onclick=()=>sair();
@@ -197,32 +289,51 @@ $("login-form").addEventListener("submit",async e=>{
     const j=await api({acao:"login",usuario:u,senha:p});
     if(!j.ok){s.className="status err";s.textContent=j.erro||"Não foi possível entrar."}
     else if(!j.perfil){s.className="status err";s.textContent="A planilha está com o código antigo. Publique a nova versão do Apps Script."}
-    else{st.sessao=j.perfil;salvarSessao();escolherSetor();$("l-senha").value="";s.textContent="";render();carregar()}
+    else{st.sessao=j.perfil;salvarSessao();escolherSetor();$("l-senha").value="";s.textContent="";render();carregar();carregarProdutos()}
   }catch(err){s.className="status err";s.textContent="Sem conexão com a planilha. Tente de novo."}
   $("l-entrar").disabled=false;
 });
 
+/* Envio: o pedido aparece na hora e o formulário fica livre para o próximo */
 $("form").addEventListener("submit",async e=>{
-  e.preventDefault();const s=$("status");
-  const produto=$("produto").value.trim();const qtdTxt=$("quantidade").value.trim();
+  e.preventDefault();
+  const produto=inp.value.trim();const qtdTxt=$("quantidade").value.trim();
   const n=Number(qtdTxt.replace(",","."));
-  if(!produto){s.className="status err";s.textContent="Digite o nome do produto.";$("produto").focus();return}
-  if(!qtdTxt||!isFinite(n)||n<=0){s.className="status err";s.textContent="Digite uma quantidade maior que zero.";$("quantidade").focus();return}
-  $("enviar").disabled=true;s.className="status";s.textContent="Enviando…";
+  if(!produto){status("Escolha ou digite o produto.",true);inp.focus();return}
+  if(!qtdTxt||!isFinite(n)||n<=0){status("Digite uma quantidade maior que zero.",true);$("quantidade").focus();return}
+  const cad=produtosDoSetor().find(p=>norm(p.produto)===norm(produto));
+  const tmp={id:"tmp-"+Date.now()+Math.random(),temp:true,data:Date.now(),setor:st.setor,tipo:st.tipo,
+    usuario:st.sessao.usuario,nome:st.sessao.nome,produto:cad?cad.produto:produto,quantidade:n,unidade:st.unidade,status:"Pendente",novo:!cad};
+  st.enviando.push(tmp);
+  inp.value="";$("quantidade").value="";fecharSugestoes();
+  st.unidade="Kg";renderEscolhas(); /* próximo pedido começa em Kg */
+  const th=$("thread");render();th.scrollTop=th.scrollHeight;
+  status(cad?"Enviando…":"Enviando produto novo…");
   try{
-    const j=await api(auth({acao:"enviar",setor:st.setor,tipo:st.tipo,produto,quantidade:n,unidade:st.unidade}));
-    if(j.ok){$("produto").value="";$("quantidade").value="";s.textContent="Enviado para o comprador.";$("produto").focus();carregar()}
-    else if(j.sessao){s.textContent="";sair(j.erro)}
-    else{s.className="status err";s.textContent=j.erro||"Não foi enviado. Tente de novo."}
-  }catch(err){s.className="status err";s.textContent="Não foi enviado: sem conexão com a planilha. Tente de novo."}
-  $("enviar").disabled=false;
+    const j=await api(auth({acao:"enviar",setor:tmp.setor,tipo:tmp.tipo,produto:tmp.produto,quantidade:n,unidade:tmp.unidade}));
+    st.enviando=st.enviando.filter(x=>x!==tmp);
+    if(j.ok){status(j.novo?"Enviado com alerta de produto novo.":"Enviado para o comprador.");await carregar();return}
+    if(j.sessao){sair(j.erro);return}
+    status(j.erro||"Não foi enviado. Tente de novo.",true);
+  }catch(err){
+    st.enviando=st.enviando.filter(x=>x!==tmp);
+    status("Não foi enviado: sem conexão com a planilha. Os dados voltaram para o campo.",true);
+  }
+  if(!inp.value&&!$("quantidade").value){inp.value=tmp.produto;$("quantidade").value=String(n).replace(".",",")}
+  render();
 });
 
 escolherSetor();
+renderEscolhas();
 render();
 carregar();
+carregarProdutos();
 setInterval(()=>{if(!document.hidden)carregar()},ATUALIZAR_A_CADA_MS);
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)carregar()});
+setInterval(()=>{if(!document.hidden)carregarProdutos()},PRODUTOS_A_CADA_MS);
+document.addEventListener("visibilitychange",()=>{
+  if(document.hidden)return;carregar();
+  if(Date.now()-st.produtosEm>PRODUTOS_A_CADA_MS)carregarProdutos();
+});
 </script>
 </body>
 </html>

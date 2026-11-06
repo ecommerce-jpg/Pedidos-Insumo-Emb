@@ -205,7 +205,9 @@ function cartao(p,aba){
   const c=el("div","pedido"+(ed.marcado?" marcado":"")+(st.invalidos.has(p.id)?" invalido":""));
   const corpo=el("div","corpo");
   const meta=el("div","meta");
-  meta.append(el("span","tag",p.setor),el("span","tag "+p.tipo,p.tipo),el("span",null,(p.nome||p.usuario||"Alguém")+" · "+fmt(p.data)));
+  meta.append(el("span","tag",p.setor),el("span","tag "+p.tipo,p.tipo));
+  if(p.novo)meta.appendChild(el("span","tag novo","Produto novo"));
+  meta.appendChild(el("span",null,(p.nome||p.usuario||"Alguém")+" · "+fmt(p.data)));
   const lp=el("div","linha-produto");lp.append(el("span","produto",p.produto),el("span","qtd",qtd(p)));
   corpo.append(meta,lp);c.appendChild(corpo);
 

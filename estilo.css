@@ -66,3 +66,7 @@ textarea:focus,input:focus,select:focus,button:focus-visible{outline:2px solid v
 .nav{font:700 14px var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:8px;padding:5px 10px}
 .qtd{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
 .produto{font-size:15px;overflow-wrap:anywhere}
+/* v1.3: alerta de produto novo */
+:root{--novo:#b4321f;--novo-soft:#fbe3de}
+@media (prefers-color-scheme:dark){:root{--novo:#ff9b85;--novo-soft:#3d221d}}
+.tag.novo{background:var(--novo-soft);color:var(--novo)}
